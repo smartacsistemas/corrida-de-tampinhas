@@ -20,15 +20,16 @@ const config = {
 const game = new Phaser.Game(config);
 
 let tampinhas = [];
+let jogador, ia;
 let isDragging = false;
 let dragStart = null;
-let dragAlvo = null;
 let linhaForca = null;
 let vencedor = null;
 let textoVencedor;
 let textoContagem;
 let botaoReiniciar;
 let corridaLiberada = false;
+let iaEvento;
 
 const PISTA = {
     x: 100,
@@ -41,7 +42,7 @@ const FORCA_MAXIMA = 600;
 const DISTANCIA_MAXIMA = 120;
 
 const CORES = [0xff0000, 0x3498db];
-const NOMES = ['Vermelha', 'Azul'];
+const NOMES = ['Vermelha', 'Azul (IA)'];
 
 function preload() {
 
@@ -73,7 +74,6 @@ function create() {
     }
     this.xChegada = xChegada;
 
-    // cria as duas tampinhas, uma em cima da outra (raias diferentes)
     tampinhas = [];
     const posY = [PISTA.y + 100, PISTA.y + 200];
 
@@ -85,27 +85,27 @@ function create() {
         t.body.setDrag(0.98);
         t.body.setBounce(0.6);
         t.nome = NOMES[i];
-        t.posInicial = { x: t.x, y: t.y };
-
-        t.setInteractive(
-            new Phaser.Geom.Circle(30, 30, 30),
-            Phaser.Geom.Circle.Contains
-        );
-        this.input.setDraggable(t);
 
         tampinhas.push(t);
     }
 
-    // colisão entre as tampinhas
+    // tampinha 0 = jogador (vermelha), tampinha 1 = IA (azul)
+    jogador = tampinhas[0];
+    ia = tampinhas[1];
+
+    // só o jogador é arrastável
+    jogador.setInteractive(
+        new Phaser.Geom.Circle(30, 30, 30),
+        Phaser.Geom.Circle.Contains
+    );
+    this.input.setDraggable(jogador);
+
     this.physics.add.collider(tampinhas[0], tampinhas[1]);
-    // colisão com as paredes
     tampinhas.forEach(t => this.physics.add.collider(t, paredes));
 
-    // eventos de arrastar (compartilhados por qualquer tampinha)
     this.input.on('dragstart', (pointer, gameObject) => {
         if (vencedor || !corridaLiberada) return;
         isDragging = true;
-        dragAlvo = gameObject;
         dragStart = { x: gameObject.x, y: gameObject.y };
         linhaForca.setVisible(true);
     });
@@ -173,7 +173,6 @@ function create() {
         fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // botão de reiniciar (HTML simples via texto clicável do Phaser)
     botaoReiniciar = this.add.text(400, 550, '🔄 Reiniciar', {
         fontSize: '24px',
         fontFamily: 'Arial',
@@ -188,8 +187,8 @@ function create() {
         corridaLiberada = false;
     });
 
-    // contagem regressiva antes de liberar a corrida
     iniciarContagem(this);
+    iaJogar(this);
 }
 
 function iniciarContagem(scene) {
@@ -212,6 +211,33 @@ function iniciarContagem(scene) {
             }
         }
     });
+}
+
+// IA: dá petelecos sozinha na tampinha azul, em intervalos aleatórios
+function iaJogar(scene) {
+    const agendarProximoPeteleco = () => {
+        // espera entre 0.8s e 1.8s antes do próximo peteleco da IA
+        const espera = Phaser.Math.Between(800, 1800);
+
+        iaEvento = scene.time.delayedCall(espera, () => {
+            if (vencedor) return; // corrida acabou, IA para de jogar
+
+            if (corridaLiberada) {
+                // força e ângulo com um pouco de variação, pra não ficar robótica
+                const forca = Phaser.Math.Between(300, 550);
+                const anguloVariacao = Phaser.Math.FloatBetween(-0.2, 0.2); // pequeno desvio vertical
+
+                ia.body.setVelocity(
+                    Math.cos(anguloVariacao) * forca,
+                    Math.sin(anguloVariacao) * forca
+                );
+            }
+
+            agendarProximoPeteleco(); // agenda o próximo, e o próximo, e o próximo...
+        });
+    };
+
+    agendarProximoPeteleco();
 }
 
 function update() {
