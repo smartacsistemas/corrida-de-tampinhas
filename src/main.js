@@ -11,7 +11,6 @@ const SomFX = {
         }
     },
 
-    // "toc" curto e seco - peteleco
     peteleco() {
         this.iniciar();
         const t = this.ctx.currentTime;
@@ -31,7 +30,6 @@ const SomFX = {
         osc.stop(t + 0.1);
     },
 
-    // "tac" mais grave e oco - colisão
     colisao() {
         this.iniciar();
         const t = this.ctx.currentTime;
@@ -51,7 +49,6 @@ const SomFX = {
         osc.stop(t + 0.15);
     },
 
-    // fanfarra ascendente - vitória
     vitoria() {
         this.iniciar();
         const notas = [523.25, 659.25, 783.99, 1046.5];
@@ -127,7 +124,11 @@ class CorridaScene extends Phaser.Scene {
 
         const posY = [this.PISTA.y + 100, this.PISTA.y + 200];
 
+        // ---------- criação das tampinhas com sombra ----------
         for (let i = 0; i < 2; i++) {
+            // sombra: um círculo cinza escuro, um pouco deslocado, atrás da tampinha
+            const sombra = this.add.circle(this.PISTA.x + 50 + 4, posY[i] + 6, 30, 0x000000, 0.25);
+
             const t = this.add.circle(this.PISTA.x + 50, posY[i], 30, CORES[i]);
             this.physics.add.existing(t);
             t.body.setCircle(30);
@@ -135,6 +136,19 @@ class CorridaScene extends Phaser.Scene {
             t.body.setDrag(0.98);
             t.body.setBounce(0.6);
             t.nome = NOMES[i];
+            t.sombra = sombra;
+
+            // rastro: emissor de partículas sutil, sempre criado mas emitindo só em alta velocidade
+            t.rastro = this.add.particles(0, 0, criarTexturaParticula(this, 'particulaRastro', CORES[i]), {
+                lifespan: 250,
+                speed: { min: 0, max: 20 },
+                scale: { start: 0.5, end: 0 },
+                alpha: { start: 0.4, end: 0 },
+                quantity: 1,
+                frequency: 40,
+                follow: t
+            });
+            t.rastro.stop(); // liga/desliga conforme velocidade no update
 
             this.tampinhas.push(t);
         }
@@ -150,6 +164,7 @@ class CorridaScene extends Phaser.Scene {
 
         this.physics.add.collider(this.tampinhas[0], this.tampinhas[1], () => {
             SomFX.colisao();
+            this.cameras.main.shake(120, 0.006);
         });
         this.tampinhas.forEach(t => this.physics.add.collider(t, paredes));
 
@@ -237,7 +252,6 @@ class CorridaScene extends Phaser.Scene {
             this.scene.restart();
         });
 
-        // botão de voltar ao menu
         this.botaoMenu = this.add.text(600, 550, '🏠 Menu', {
             fontSize: '24px',
             fontFamily: 'Arial',
@@ -303,23 +317,77 @@ class CorridaScene extends Phaser.Scene {
     }
 
     update() {
+        // ---------- atualiza sombra e rastro de cada tampinha ----------
+        this.tampinhas.forEach(t => {
+            // sombra segue a tampinha com leve deslocamento
+            if (t.sombra) {
+                t.sombra.x = t.x + 4;
+                t.sombra.y = t.y + 6;
+            }
+
+            // rastro liga/desliga conforme velocidade
+            if (t.body && t.rastro) {
+                const velocidade = Phaser.Math.Distance.Between(0, 0, t.body.velocity.x, t.body.velocity.y);
+                if (velocidade > 60) {
+                    t.rastro.start();
+                } else {
+                    t.rastro.stop();
+                }
+            }
+        });
+
         if (this.vencedor) return;
 
         this.tampinhas.forEach(t => {
             if (t.x >= this.xChegada) {
                 this.vencedor = t.nome;
+                this.tampinhaVencedora = t;
             }
         });
 
         if (this.vencedor) {
             SomFX.vitoria();
+
+            // explosão de partículas na cor da tampinha vencedora
+            const corVencedor = this.tampinhaVencedora.fillColor;
+            const explosao = this.add.particles(
+                this.tampinhaVencedora.x,
+                this.tampinhaVencedora.y,
+                criarTexturaParticula(this, 'particulaExplosao', corVencedor),
+                {
+                    lifespan: 700,
+                    speed: { min: 100, max: 300 },
+                    scale: { start: 1, end: 0 },
+                    alpha: { start: 1, end: 0 },
+                    quantity: 30,
+                    emitting: false
+                }
+            );
+            explosao.explode(30);
+
             this.textoVencedor.setText('🏆 Tampinha ' + this.vencedor + ' venceu!');
             this.textoVencedor.setVisible(true);
             this.botaoReiniciar.setVisible(true);
             this.botaoMenu.setVisible(true);
-            this.tampinhas.forEach(t => t.body.setVelocity(0, 0));
+            this.tampinhas.forEach(t => {
+                t.body.setVelocity(0, 0);
+                if (t.rastro) t.rastro.stop();
+            });
         }
     }
+}
+
+// ---------- utilitário: cria uma textura circular simples pra usar em partículas ----------
+function criarTexturaParticula(scene, chave, cor) {
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(cor, 1);
+    g.fillCircle(8, 8, 8);
+    g.generateTexture(chave, 16, 16);
+    g.destroy();
+
+    return chave;
 }
 
 const config = {
