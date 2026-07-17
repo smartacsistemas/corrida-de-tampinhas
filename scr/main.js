@@ -20,14 +20,14 @@ const config = {
 const game = new Phaser.Game(config);
 
 let tampinha;
+let tampinha2;
 let isDragging = false;
 let dragStart = null;
 let linhaForca = null;
 
-// Constantes de ajuste da física
-const FORCA_MAXIMA = 600;       // limite de velocidade do peteleco
-const DISTANCIA_MAXIMA = 120;   // distância máxima de "puxada" considerada
-const ATRITO = 0.98;            // quanto a tampinha desacelera por frame
+const FORCA_MAXIMA = 600;
+const DISTANCIA_MAXIMA = 120;
+const ATRITO = 0.98;
 
 function preload() {
 
@@ -40,21 +40,33 @@ function create() {
     // pista de giz
     this.add.rectangle(400, 300, 600, 300, 0xffffff, 0.2);
 
-    // primeira tampinha
+    // primeira tampinha (vermelha)
     tampinha = this.add.circle(200, 300, 30, 0xff0000);
     this.physics.add.existing(tampinha);
     tampinha.body.setCircle(30);
     tampinha.body.setDamping(true);
     tampinha.body.setDrag(0.98);
-    tampinha.body.setBounce(0.4);
+    tampinha.body.setBounce(0.6);
     tampinha.body.setCollideWorldBounds(true);
 
-    // linha que mostra a força (invisível no início)
+    // segunda tampinha (azul) - parada, esperando a colisão
+    tampinha2 = this.add.circle(500, 300, 30, 0x3498db);
+    this.physics.add.existing(tampinha2);
+    tampinha2.body.setCircle(30);
+    tampinha2.body.setDamping(true);
+    tampinha2.body.setDrag(0.98);
+    tampinha2.body.setBounce(0.6);
+    tampinha2.body.setCollideWorldBounds(true);
+
+    // colisão entre as duas tampinhas
+    this.physics.add.collider(tampinha, tampinha2);
+
+    // linha de força
     linhaForca = this.add.line(0, 0, 0, 0, 0, 0, 0xffff00);
     linhaForca.setLineWidth(3);
     linhaForca.setVisible(false);
 
-    // torna a tampinha interativa (clicável/arrastável)
+    // só a tampinha vermelha é jogável por enquanto
     tampinha.setInteractive(
         new Phaser.Geom.Circle(30, 30, 30),
         Phaser.Geom.Circle.Contains
@@ -62,7 +74,6 @@ function create() {
 
     this.input.setDraggable(tampinha);
 
-    // eventos de arrastar
     tampinha.on('dragstart', () => {
         isDragging = true;
         dragStart = { x: tampinha.x, y: tampinha.y };
@@ -70,7 +81,6 @@ function create() {
     });
 
     tampinha.on('drag', (pointer, dragX, dragY) => {
-        // limita o quanto pode puxar
         const dx = dragX - dragStart.x;
         const dy = dragY - dragStart.y;
         const distancia = Phaser.Math.Distance.Between(0, 0, dx, dy);
@@ -84,7 +94,6 @@ function create() {
             tampinha.y = dragY;
         }
 
-        // atualiza a linha de força (do centro original até a posição atual)
         linhaForca.setTo(dragStart.x, dragStart.y, tampinha.x, tampinha.y);
     });
 
@@ -96,7 +105,6 @@ function create() {
         const dy = dragStart.y - tampinha.y;
         const distancia = Phaser.Math.Distance.Between(0, 0, dx, dy);
 
-        // força proporcional à distância puxada (invertida = solta pra frente)
         const forca = Phaser.Math.Clamp(
             (distancia / DISTANCIA_MAXIMA) * FORCA_MAXIMA,
             0,
@@ -110,7 +118,6 @@ function create() {
             Math.sin(angulo) * forca
         );
 
-        // volta a tampinha pra posição real (soltou do "estilingue")
         tampinha.x = dragStart.x;
         tampinha.y = dragStart.y;
     });
