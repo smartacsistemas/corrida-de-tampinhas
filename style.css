@@ -11,3 +11,53 @@ body {
 #game {
     border: 3px solid #fff;
 }
+
+#aviso-rotacao {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #111;
+    color: #fff;
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-family: Arial, sans-serif;
+}
+
+.conteudo-aviso {
+    font-size: 60px;
+}
+
+.conteudo-aviso p {
+    font-size: 22px;
+    margin-top: 10px;
+}
+
+/* Mostra o aviso só em celular no modo retrato (em pé) */
+@media screen and (max-width: 900px) and (orientation: portrait) {
+    #aviso-rotacao {
+        display: flex;
+    }
+
+    #game {
+        display: none;
+    }
+}
+
+/* Faz o jogo ocupar melhor a tela quando estiver em landscape no celular */
+@media screen and (max-width: 900px) and (orientation: landscape) {
+    body {
+        height: 100vh;
+    }
+
+    #game canvas {
+        max-width: 100vw;
+        max-height: 100vh;
+        width: auto;
+        height: auto;
+    }
+}
