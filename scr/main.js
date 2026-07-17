@@ -19,16 +19,17 @@ const config = {
 
 const game = new Phaser.Game(config);
 
-let tampinha;
-let tampinha2;
+let tampinhas = [];
 let isDragging = false;
 let dragStart = null;
+let dragAlvo = null;
 let linhaForca = null;
-let linhaChegada;
 let vencedor = null;
 let textoVencedor;
+let textoContagem;
+let botaoReiniciar;
+let corridaLiberada = false;
 
-// Limites da pista (não da tela inteira)
 const PISTA = {
     x: 100,
     y: 150,
@@ -38,17 +39,17 @@ const PISTA = {
 
 const FORCA_MAXIMA = 600;
 const DISTANCIA_MAXIMA = 120;
-const ATRITO = 0.98;
+
+const CORES = [0xff0000, 0x3498db];
+const NOMES = ['Vermelha', 'Azul'];
 
 function preload() {
 
 }
 
 function create() {
-    // chão (tela toda, só decorativo)
     this.add.rectangle(400, 300, 800, 600, 0x999999);
 
-    // pista de giz (área jogável)
     this.add.rectangle(
         PISTA.x + PISTA.largura / 2,
         PISTA.y + PISTA.altura / 2,
@@ -58,114 +59,82 @@ function create() {
         0.2
     );
 
-    // bordas físicas da pista (invisíveis, só pra colisão)
     const paredes = this.physics.add.staticGroup();
-
     const espessura = 10;
-    // topo
     paredes.add(this.add.rectangle(PISTA.x + PISTA.largura / 2, PISTA.y, PISTA.largura, espessura, 0xffffff, 0).setOrigin(0.5));
-    // base
     paredes.add(this.add.rectangle(PISTA.x + PISTA.largura / 2, PISTA.y + PISTA.altura, PISTA.largura, espessura, 0xffffff, 0).setOrigin(0.5));
-    // esquerda
     paredes.add(this.add.rectangle(PISTA.x, PISTA.y + PISTA.altura / 2, espessura, PISTA.altura, 0xffffff, 0).setOrigin(0.5));
-    // direita
     paredes.add(this.add.rectangle(PISTA.x + PISTA.largura, PISTA.y + PISTA.altura / 2, espessura, PISTA.altura, 0xffffff, 0).setOrigin(0.5));
 
-    // linha de chegada (perto da borda direita da pista)
     const xChegada = PISTA.x + PISTA.largura - 40;
-    linhaChegada = this.add.rectangle(
-        xChegada,
-        PISTA.y + PISTA.altura / 2,
-        6,
-        PISTA.altura,
-        0x2ecc71
-    );
-    // listras (efeito xadrez simples)
+    this.add.rectangle(xChegada, PISTA.y + PISTA.altura / 2, 6, PISTA.altura, 0x2ecc71);
     for (let i = 0; i < PISTA.altura / 20; i++) {
-        this.add.rectangle(
-            xChegada,
-            PISTA.y + i * 20 + 10,
-            6,
-            10,
-            i % 2 === 0 ? 0x000000 : 0xffffff
+        this.add.rectangle(xChegada, PISTA.y + i * 20 + 10, 6, 10, i % 2 === 0 ? 0x000000 : 0xffffff);
+    }
+    this.xChegada = xChegada;
+
+    // cria as duas tampinhas, uma em cima da outra (raias diferentes)
+    tampinhas = [];
+    const posY = [PISTA.y + 100, PISTA.y + 200];
+
+    for (let i = 0; i < 2; i++) {
+        const t = this.add.circle(PISTA.x + 50, posY[i], 30, CORES[i]);
+        this.physics.add.existing(t);
+        t.body.setCircle(30);
+        t.body.setDamping(true);
+        t.body.setDrag(0.98);
+        t.body.setBounce(0.6);
+        t.nome = NOMES[i];
+        t.posInicial = { x: t.x, y: t.y };
+
+        t.setInteractive(
+            new Phaser.Geom.Circle(30, 30, 30),
+            Phaser.Geom.Circle.Contains
         );
+        this.input.setDraggable(t);
+
+        tampinhas.push(t);
     }
 
-    // primeira tampinha (vermelha)
-    tampinha = this.add.circle(PISTA.x + 50, PISTA.y + PISTA.altura / 2, 30, 0xff0000);
-    this.physics.add.existing(tampinha);
-    tampinha.body.setCircle(30);
-    tampinha.body.setDamping(true);
-    tampinha.body.setDrag(0.98);
-    tampinha.body.setBounce(0.6);
+    // colisão entre as tampinhas
+    this.physics.add.collider(tampinhas[0], tampinhas[1]);
+    // colisão com as paredes
+    tampinhas.forEach(t => this.physics.add.collider(t, paredes));
 
-    // segunda tampinha (azul)
-    tampinha2 = this.add.circle(PISTA.x + 250, PISTA.y + PISTA.altura / 2, 30, 0x3498db);
-    this.physics.add.existing(tampinha2);
-    tampinha2.body.setCircle(30);
-    tampinha2.body.setDamping(true);
-    tampinha2.body.setDrag(0.98);
-    tampinha2.body.setBounce(0.6);
-
-    // colisões
-    this.physics.add.collider(tampinha, tampinha2);
-    this.physics.add.collider(tampinha, paredes);
-    this.physics.add.collider(tampinha2, paredes);
-
-    // texto de vencedor (escondido no início)
-    textoVencedor = this.add.text(400, 80, '', {
-        fontSize: '32px',
-        fontFamily: 'Arial',
-        color: '#ffff00',
-        backgroundColor: '#000000',
-        padding: { x: 10, y: 6 }
-    }).setOrigin(0.5).setVisible(false);
-
-    // linha de força
-    linhaForca = this.add.line(0, 0, 0, 0, 0, 0, 0xffff00);
-    linhaForca.setLineWidth(3);
-    linhaForca.setVisible(false);
-
-    // tampinha vermelha jogável
-    tampinha.setInteractive(
-        new Phaser.Geom.Circle(30, 30, 30),
-        Phaser.Geom.Circle.Contains
-    );
-
-    this.input.setDraggable(tampinha);
-
-    tampinha.on('dragstart', () => {
-        if (vencedor) return; // trava o jogo depois que alguém vence
+    // eventos de arrastar (compartilhados por qualquer tampinha)
+    this.input.on('dragstart', (pointer, gameObject) => {
+        if (vencedor || !corridaLiberada) return;
         isDragging = true;
-        dragStart = { x: tampinha.x, y: tampinha.y };
+        dragAlvo = gameObject;
+        dragStart = { x: gameObject.x, y: gameObject.y };
         linhaForca.setVisible(true);
     });
 
-    tampinha.on('drag', (pointer, dragX, dragY) => {
-        if (vencedor) return;
+    this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+        if (vencedor || !corridaLiberada) return;
         const dx = dragX - dragStart.x;
         const dy = dragY - dragStart.y;
         const distancia = Phaser.Math.Distance.Between(0, 0, dx, dy);
 
         if (distancia > DISTANCIA_MAXIMA) {
             const angulo = Math.atan2(dy, dx);
-            tampinha.x = dragStart.x + Math.cos(angulo) * DISTANCIA_MAXIMA;
-            tampinha.y = dragStart.y + Math.sin(angulo) * DISTANCIA_MAXIMA;
+            gameObject.x = dragStart.x + Math.cos(angulo) * DISTANCIA_MAXIMA;
+            gameObject.y = dragStart.y + Math.sin(angulo) * DISTANCIA_MAXIMA;
         } else {
-            tampinha.x = dragX;
-            tampinha.y = dragY;
+            gameObject.x = dragX;
+            gameObject.y = dragY;
         }
 
-        linhaForca.setTo(dragStart.x, dragStart.y, tampinha.x, tampinha.y);
+        linhaForca.setTo(dragStart.x, dragStart.y, gameObject.x, gameObject.y);
     });
 
-    tampinha.on('dragend', () => {
-        if (vencedor) return;
+    this.input.on('dragend', (pointer, gameObject) => {
+        if (vencedor || !corridaLiberada) return;
         isDragging = false;
         linhaForca.setVisible(false);
 
-        const dx = dragStart.x - tampinha.x;
-        const dy = dragStart.y - tampinha.y;
+        const dx = dragStart.x - gameObject.x;
+        const dy = dragStart.y - gameObject.y;
         const distancia = Phaser.Math.Distance.Between(0, 0, dx, dy);
 
         const forca = Phaser.Math.Clamp(
@@ -176,32 +145,88 @@ function create() {
 
         const angulo = Math.atan2(dy, dx);
 
-        tampinha.body.setVelocity(
+        gameObject.body.setVelocity(
             Math.cos(angulo) * forca,
             Math.sin(angulo) * forca
         );
 
-        tampinha.x = dragStart.x;
-        tampinha.y = dragStart.y;
+        gameObject.x = dragStart.x;
+        gameObject.y = dragStart.y;
     });
 
-    // guarda a coordenada de chegada pra usar no update
-    this.xChegada = xChegada;
+    linhaForca = this.add.line(0, 0, 0, 0, 0, 0, 0xffff00);
+    linhaForca.setLineWidth(3);
+    linhaForca.setVisible(false);
+
+    textoVencedor = this.add.text(400, 80, '', {
+        fontSize: '32px',
+        fontFamily: 'Arial',
+        color: '#ffff00',
+        backgroundColor: '#000000',
+        padding: { x: 10, y: 6 }
+    }).setOrigin(0.5).setVisible(false);
+
+    textoContagem = this.add.text(400, 300, '', {
+        fontSize: '80px',
+        fontFamily: 'Arial',
+        color: '#ffffff',
+        fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // botão de reiniciar (HTML simples via texto clicável do Phaser)
+    botaoReiniciar = this.add.text(400, 550, '🔄 Reiniciar', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        color: '#ffffff',
+        backgroundColor: '#333333',
+        padding: { x: 16, y: 8 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setVisible(false);
+
+    botaoReiniciar.on('pointerdown', () => {
+        this.scene.restart();
+        vencedor = null;
+        corridaLiberada = false;
+    });
+
+    // contagem regressiva antes de liberar a corrida
+    iniciarContagem(this);
+}
+
+function iniciarContagem(scene) {
+    const passos = ['3', '2', '1', 'Vai!'];
+    let i = 0;
+
+    textoContagem.setText(passos[i]);
+
+    scene.time.addEvent({
+        delay: 800,
+        repeat: passos.length - 1,
+        callback: () => {
+            i++;
+            if (i < passos.length) {
+                textoContagem.setText(passos[i]);
+            }
+            if (i === passos.length - 1) {
+                corridaLiberada = true;
+                scene.time.delayedCall(600, () => textoContagem.setText(''));
+            }
+        }
+    });
 }
 
 function update() {
     if (vencedor) return;
 
-    if (tampinha.x >= this.xChegada) {
-        vencedor = 'Vermelha';
-    } else if (tampinha2.x >= this.xChegada) {
-        vencedor = 'Azul';
-    }
+    tampinhas.forEach(t => {
+        if (t.x >= this.xChegada) {
+            vencedor = t.nome;
+        }
+    });
 
     if (vencedor) {
         textoVencedor.setText('🏆 Tampinha ' + vencedor + ' venceu!');
         textoVencedor.setVisible(true);
-        tampinha.body.setVelocity(0, 0);
-        tampinha2.body.setVelocity(0, 0);
+        botaoReiniciar.setVisible(true);
+        tampinhas.forEach(t => t.body.setVelocity(0, 0));
     }
 }
