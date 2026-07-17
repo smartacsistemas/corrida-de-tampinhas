@@ -1,3 +1,81 @@
+// ---------- Gerador de sons sintetizados ----------
+const SomFX = {
+    ctx: null,
+
+    iniciar() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+
+    // "toc" curto e seco - peteleco
+    peteleco() {
+        this.iniciar();
+        const t = this.ctx.currentTime;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(900, t);
+        osc.frequency.exponentialRampToValueAtTime(300, t + 0.08);
+
+        gain.gain.setValueAtTime(0.25, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+
+        osc.connect(gain).connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.1);
+    },
+
+    // "tac" mais grave e oco - colisão
+    colisao() {
+        this.iniciar();
+        const t = this.ctx.currentTime;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.exponentialRampToValueAtTime(80, t + 0.12);
+
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+        osc.connect(gain).connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.15);
+    },
+
+    // fanfarra ascendente - vitória
+    vitoria() {
+        this.iniciar();
+        const notas = [523.25, 659.25, 783.99, 1046.5];
+
+        notas.forEach((freq, i) => {
+            const t = this.ctx.currentTime + i * 0.12;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freq, t);
+
+            gain.gain.setValueAtTime(0.001, t);
+            gain.gain.linearRampToValueAtTime(0.2, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.4);
+        });
+    }
+};
+
 class CorridaScene extends Phaser.Scene {
     constructor() {
         super('CorridaScene');
@@ -70,7 +148,9 @@ class CorridaScene extends Phaser.Scene {
         );
         this.input.setDraggable(this.jogador);
 
-        this.physics.add.collider(this.tampinhas[0], this.tampinhas[1]);
+        this.physics.add.collider(this.tampinhas[0], this.tampinhas[1], () => {
+            SomFX.colisao();
+        });
         this.tampinhas.forEach(t => this.physics.add.collider(t, paredes));
 
         this.input.on('dragstart', (pointer, gameObject) => {
@@ -102,6 +182,8 @@ class CorridaScene extends Phaser.Scene {
             if (this.vencedor || !this.corridaLiberada) return;
             this.isDragging = false;
             this.linhaForca.setVisible(false);
+
+            SomFX.peteleco();
 
             const dx = this.dragStart.x - gameObject.x;
             const dy = this.dragStart.y - gameObject.y;
@@ -209,6 +291,8 @@ class CorridaScene extends Phaser.Scene {
                         Math.cos(anguloVariacao) * forca,
                         Math.sin(anguloVariacao) * forca
                     );
+
+                    SomFX.peteleco();
                 }
 
                 agendarProximoPeteleco();
@@ -228,6 +312,7 @@ class CorridaScene extends Phaser.Scene {
         });
 
         if (this.vencedor) {
+            SomFX.vitoria();
             this.textoVencedor.setText('🏆 Tampinha ' + this.vencedor + ' venceu!');
             this.textoVencedor.setVisible(true);
             this.botaoReiniciar.setVisible(true);
