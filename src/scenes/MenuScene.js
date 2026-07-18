@@ -45,7 +45,7 @@ class MenuScene extends Phaser.Scene {
         botaoJogar.on('pointerout', () => botaoJogar.setStyle({ backgroundColor: '#2ecc71' }));
 
         botaoJogar.on('pointerdown', () => {
-            this.scene.start('CorridaScene');
+            this.scene.start('SelecaoScene');
         });
 
         // rodapé

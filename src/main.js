@@ -1,4 +1,8 @@
-// ---------- Gerador de sons sintetizados ----------
+// ---------- Estado global do jogo (persiste entre scenes) ----------
+const JogoState = {
+    corJogador: 0xe74c3c,       // cor da marca padrão (Cola Max)
+    marcaJogador: 'Cola Max'    // nome da marca padrão, na primeira vez
+};
 const SomFX = {
     ctx: null,
 
@@ -11,44 +15,95 @@ const SomFX = {
         }
     },
 
+    // cria um buffer de ruído branco (base pra sons percussivos/metálicos)
+    criarRuido(duracao) {
+        const tamanho = this.ctx.sampleRate * duracao;
+        const buffer = this.ctx.createBuffer(1, tamanho, this.ctx.sampleRate);
+        const dados = buffer.getChannelData(0);
+        for (let i = 0; i < tamanho; i++) {
+            dados[i] = Math.random() * 2 - 1;
+        }
+        return buffer;
+    },
+
+    // peteleco: "flick" seco - ruído agudo bem curto + um leve "toc" de corpo
     peteleco() {
         this.iniciar();
         const t = this.ctx.currentTime;
 
+        // camada 1: estalo agudo (o "flick" do dedo)
+        const ruido = this.ctx.createBufferSource();
+        ruido.buffer = this.criarRuido(0.05);
+
+        const filtroAgudo = this.ctx.createBiquadFilter();
+        filtroAgudo.type = 'highpass';
+        filtroAgudo.frequency.setValueAtTime(3000, t);
+
+        const gainRuido = this.ctx.createGain();
+        gainRuido.gain.setValueAtTime(0.5, t);
+        gainRuido.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+
+        ruido.connect(filtroAgudo).connect(gainRuido).connect(this.ctx.destination);
+        ruido.start(t);
+        ruido.stop(t + 0.05);
+
+        // camada 2: corpo curto e seco (o "toc" da tampinha saindo)
         const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        const gainOsc = this.ctx.createGain();
 
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(900, t);
-        osc.frequency.exponentialRampToValueAtTime(300, t + 0.08);
+        osc.frequency.setValueAtTime(500, t);
+        osc.frequency.exponentialRampToValueAtTime(180, t + 0.05);
 
-        gain.gain.setValueAtTime(0.25, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        gainOsc.gain.setValueAtTime(0.15, t);
+        gainOsc.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
 
-        osc.connect(gain).connect(this.ctx.destination);
+        osc.connect(gainOsc).connect(this.ctx.destination);
         osc.start(t);
-        osc.stop(t + 0.1);
+        osc.stop(t + 0.07);
     },
 
+    // colisão: "clink" metálico de tampinha batendo em tampinha
     colisao() {
         this.iniciar();
         const t = this.ctx.currentTime;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        // camada 1: impacto de ruído filtrado em banda estreita (dá o "corpo" metálico)
+        const ruido = this.ctx.createBufferSource();
+        ruido.buffer = this.criarRuido(0.15);
 
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(200, t);
-        osc.frequency.exponentialRampToValueAtTime(80, t + 0.12);
+        const filtroBanda = this.ctx.createBiquadFilter();
+        filtroBanda.type = 'bandpass';
+        filtroBanda.frequency.setValueAtTime(2500, t);
+        filtroBanda.Q.setValueAtTime(6, t);
 
-        gain.gain.setValueAtTime(0.3, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+        const gainRuido = this.ctx.createGain();
+        gainRuido.gain.setValueAtTime(0.4, t);
+        gainRuido.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
 
-        osc.connect(gain).connect(this.ctx.destination);
-        osc.start(t);
-        osc.stop(t + 0.15);
+        ruido.connect(filtroBanda).connect(gainRuido).connect(this.ctx.destination);
+        ruido.start(t);
+        ruido.stop(t + 0.15);
+
+        // camada 2: dois "pings" metálicos com frequências próximas (batimento = som de metal)
+        [1800, 2650].forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, t);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.7, t + 0.1);
+
+            gain.gain.setValueAtTime(0.12, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12 - i * 0.02);
+
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.15);
+        });
     },
 
+    // fanfarra ascendente - vitória
     vitoria() {
         this.iniciar();
         const notas = [523.25, 659.25, 783.99, 1046.5];
@@ -71,8 +126,155 @@ const SomFX = {
             osc.stop(t + 0.4);
         });
     }
-};
 
+    }
+
+// ---------- Marcas fictícias disponíveis (fonte única, usada por todas as scenes) ----------
+const MARCAS_DISPONIVEIS = [
+    { nome: 'Cola Max',    cor: 0xe74c3c, corTexto: '#ffffff', icone: 'raio' },
+    { nome: 'Refri Pop',   cor: 0x3498db, corTexto: '#ffffff', icone: 'onda' },
+    { nome: 'Cerva Gold',  cor: 0xf1c40f, corTexto: '#000000', icone: 'coroa' },
+    { nome: 'Turbo Cola',  cor: 0x2c3e50, corTexto: '#ffffff', icone: 'diamante' },
+    { nome: 'Ice Beer',    cor: 0x1abc9c, corTexto: '#000000', icone: 'gota' },
+    { nome: 'Limão Fresh', cor: 0x2ecc71, corTexto: '#000000', icone: 'estrela' },
+    { nome: 'Roxo Bomba',  cor: 0x9b59b6, corTexto: '#ffffff', icone: 'trevo' },
+    { nome: 'Laranjito',   cor: 0xe67e22, corTexto: '#000000', icone: 'sol' }
+];
+
+// ---------- Gerador de logos e texturas de tampinha (100% por código, sem imagens externas) ----------
+function desenharEstrela(g, cx, cy, pontas, raioExterno, raioInterno) {
+    const passos = pontas * 2;
+    const pontos = [];
+    for (let i = 0; i < passos; i++) {
+        const r = (i % 2 === 0) ? raioExterno : raioInterno;
+        const angulo = (Math.PI / pontas) * i - Math.PI / 2;
+        pontos.push({ x: cx + Math.cos(angulo) * r, y: cy + Math.sin(angulo) * r });
+    }
+    g.fillPoints(pontos, true);
+}
+
+function desenharIcone(g, tipo, cx, cy, tam, corHex) {
+    const cor = Phaser.Display.Color.HexStringToColor(corHex).color;
+    g.fillStyle(cor, 0.95);
+    g.lineStyle(3, cor, 0.95);
+
+    switch (tipo) {
+        case 'raio':
+            g.fillPoints([
+                { x: cx - 2, y: cy - tam },
+                { x: cx + 5, y: cy - tam },
+                { x: cx - 1, y: cy },
+                { x: cx + 6, y: cy },
+                { x: cx - 6, y: cy + tam },
+                { x: cx - 1, y: cy + 2 },
+                { x: cx - 7, y: cy + 2 }
+            ], true);
+            break;
+
+        case 'estrela':
+            desenharEstrela(g, cx, cy, 5, tam, tam / 2.2);
+            break;
+
+        case 'onda':
+            g.beginPath();
+            g.moveTo(cx - tam, cy + tam / 3);
+            g.lineTo(cx - tam / 2, cy - tam / 3);
+            g.lineTo(cx, cy + tam / 3);
+            g.lineTo(cx + tam / 2, cy - tam / 3);
+            g.lineTo(cx + tam, cy + tam / 3);
+            g.strokePath();
+            break;
+
+        case 'gota':
+            g.fillCircle(cx, cy + tam / 3, tam / 2);
+            g.fillTriangle(cx - tam / 2, cy, cx + tam / 2, cy, cx, cy - tam);
+            break;
+
+        case 'diamante':
+            g.fillPoints([
+                { x: cx, y: cy - tam },
+                { x: cx + tam * 0.7, y: cy },
+                { x: cx, y: cy + tam },
+                { x: cx - tam * 0.7, y: cy }
+            ], true);
+            break;
+
+        case 'trevo':
+            g.fillCircle(cx - tam / 2, cy - tam / 3, tam / 2.4);
+            g.fillCircle(cx + tam / 2, cy - tam / 3, tam / 2.4);
+            g.fillCircle(cx, cy + tam / 3, tam / 2.4);
+            break;
+
+        case 'coroa':
+            g.fillPoints([
+                { x: cx - tam, y: cy + tam / 2 },
+                { x: cx - tam, y: cy - tam / 4 },
+                { x: cx - tam / 2, y: cy + tam / 4 },
+                { x: cx, y: cy - tam / 2 },
+                { x: cx + tam / 2, y: cy + tam / 4 },
+                { x: cx + tam, y: cy - tam / 4 },
+                { x: cx + tam, y: cy + tam / 2 }
+            ], true);
+            break;
+
+        case 'sol':
+            for (let i = 0; i < 8; i++) {
+                const ang = (Math.PI / 4) * i;
+                g.lineBetween(
+                    cx + Math.cos(ang) * (tam / 2),
+                    cy + Math.sin(ang) * (tam / 2),
+                    cx + Math.cos(ang) * tam,
+                    cy + Math.sin(ang) * tam
+                );
+            }
+            g.fillCircle(cx, cy, tam / 2.2);
+            break;
+
+        default:
+            g.fillCircle(cx, cy, tam / 2);
+    }
+}
+
+// gera (uma vez só, cacheada) uma textura de tampinha com borda serrilhada + logo
+function criarTexturaTampinha(scene, marca) {
+    const chave = 'tampinha_' + marca.nome.replace(/\s+/g, '_');
+    if (scene.textures.exists(chave)) return chave;
+
+    const tamanho = 100;
+    const raio = 45;
+    const centro = tamanho / 2;
+    const g = scene.add.graphics();
+
+    // borda serrilhada (efeito de tampinha de garrafa)
+    const dentes = 16;
+    g.fillStyle(0x000000, 0.35);
+    g.beginPath();
+    for (let i = 0; i < dentes * 2; i++) {
+        const angulo = (Math.PI * 2 / (dentes * 2)) * i;
+        const r = (i % 2 === 0) ? raio : raio - 6;
+        const x = centro + Math.cos(angulo) * r;
+        const y = centro + Math.sin(angulo) * r;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath();
+    g.fillPath();
+
+    // corpo colorido
+    g.fillStyle(marca.cor, 1);
+    g.fillCircle(centro, centro, raio - 7);
+
+    // brilho superior (efeito 3D leve)
+    g.fillStyle(0xffffff, 0.25);
+    g.fillEllipse(centro - 12, centro - 14, 26, 14);
+
+    // ícone/logo no centro
+    desenharIcone(g, marca.icone, centro, centro + 6, 16, marca.corTexto);
+
+    g.generateTexture(chave, tamanho, tamanho);
+    g.destroy();
+
+    return chave;
+}
 class CorridaScene extends Phaser.Scene {
     constructor() {
         super('CorridaScene');
@@ -95,8 +297,24 @@ class CorridaScene extends Phaser.Scene {
         this.FORCA_MAXIMA = 600;
         this.DISTANCIA_MAXIMA = 120;
 
-        const CORES = [0xff0000, 0x3498db];
-        const NOMES = ['Vermelha', 'Azul (IA)'];
+        // lista de marcas fictícias disponíveis (mesma da tela de seleção)
+const MARCAS_DISPONIVEIS = [
+    { nome: 'Cola Max',    cor: 0xe74c3c },
+    { nome: 'Refri Pop',   cor: 0x3498db },
+    { nome: 'Cerva Gold',  cor: 0xf1c40f },
+    { nome: 'Turbo Cola',  cor: 0x2c3e50 },
+    { nome: 'Ice Beer',    cor: 0x1abc9c },
+    { nome: 'Limão Fresh', cor: 0x2ecc71 },
+    { nome: 'Roxo Bomba',  cor: 0x9b59b6 },
+    { nome: 'Laranjito',   cor: 0xe67e22 }
+];
+
+// sorteia uma marca pra IA, diferente da marca escolhida pelo jogador
+const marcasParaIA = MARCAS_DISPONIVEIS.filter(m => m.nome !== JogoState.marcaJogador);
+const marcaIA = Phaser.Utils.Array.GetRandom(marcasParaIA);
+
+const CORES = [JogoState.corJogador, marcaIA.cor];
+const NOMES = [JogoState.marcaJogador, marcaIA.nome];
 
         this.add.rectangle(400, 300, 800, 600, 0x999999);
 
@@ -402,7 +620,7 @@ const config = {
             debug: false
         }
     },
-    scene: [MenuScene, CorridaScene]
+    scene: [MenuScene, SelecaoScene, CorridaScene]
 };
 
 const game = new Phaser.Game(config);
