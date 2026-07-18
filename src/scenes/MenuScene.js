@@ -4,6 +4,14 @@ class MenuScene extends Phaser.Scene {
     }
 
     create() {
+    // tenta forçar landscape (só funciona em alguns navegadores Android, em fullscreen)
+    if (screen.orientation && screen.orientation.lock) {
+        document.documentElement.requestFullscreen?.().then(() => {
+            screen.orientation.lock('landscape').catch(() => {});
+        }).catch(() => {});
+    }
+
+    
         // fundo
         this.add.rectangle(400, 300, 800, 600, 0x1a1a1a);
 
