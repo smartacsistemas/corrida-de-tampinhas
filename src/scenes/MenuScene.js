@@ -11,6 +11,10 @@ class MenuScene extends Phaser.Scene {
         super('MenuScene');
     }
 
+    preload() {
+        this.load.audio('musica_menu', 'assets/audio/musica_menu.mp3');
+    }
+
     create() {
         this.transicaoEmAndamento = false;
 
@@ -97,15 +101,15 @@ class MenuScene extends Phaser.Scene {
             color: '#e8e2d5'
         }).setOrigin(0.5).setAlpha(0.85);
 
-        // trilha de quintal: musiquinha de fundo + passarinho cantando + cachorro latindo ao longe
-        MusicaFundo.iniciar();
+        // trilha de quintal: música de fundo (arquivo real) + passarinho cantando
+        this.musicaMenu = this.sound.add('musica_menu', { loop: true, volume: 0.35 });
+        this.musicaMenu.play();
         this.agendarSomAmbiente();
 
-        // ao sair do menu (troca de scene), corta os agendamentos pra não vazar som pra próxima tela
+        // ao sair do menu (troca de scene), corta a música e os agendamentos
         this.events.once('shutdown', () => {
-            MusicaFundo.parar();
+            if (this.musicaMenu) this.musicaMenu.stop();
             if (this.timerPassarinho) this.timerPassarinho.remove();
-            if (this.timerCachorro) this.timerCachorro.remove();
         });
     }
 
@@ -117,12 +121,6 @@ class MenuScene extends Phaser.Scene {
             this.timerPassarinho = this.time.delayedCall(Phaser.Math.Between(2500, 5500), proximoPassarinho);
         };
         this.timerPassarinho = this.time.delayedCall(Phaser.Math.Between(1200, 2500), proximoPassarinho);
-
-        const proximoCachorro = () => {
-            SomFX.cachorro();
-            this.timerCachorro = this.time.delayedCall(Phaser.Math.Between(8000, 16000), proximoCachorro);
-        };
-        this.timerCachorro = this.time.delayedCall(Phaser.Math.Between(4000, 9000), proximoCachorro);
     }
 
     criarBotaoComecar(x, y) {
@@ -218,6 +216,14 @@ class MenuScene extends Phaser.Scene {
         this.time.delayedCall(300, () => {
             this.cameras.main.fadeOut(300, 0, 0, 0);
         });
+
+        if (this.musicaMenu) {
+            this.tweens.add({
+                targets: this.musicaMenu,
+                volume: 0,
+                duration: 500
+            });
+        }
 
         this.cameras.main.once('camerafadeoutcomplete', () => {
             this.scene.start('SelecaoScene');
