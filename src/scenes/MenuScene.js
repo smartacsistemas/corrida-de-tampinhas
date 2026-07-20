@@ -34,7 +34,8 @@ class MenuScene extends Phaser.Scene {
         // passarinhos — pequeno detalhe vivo no céu
         const passaro1 = this.add.text(680, 70, '🐦', { fontSize: '22px' }).setOrigin(0.5);
         const passaro2 = this.add.text(730, 95, '🐦', { fontSize: '18px' }).setOrigin(0.5).setAlpha(0.85);
-        [passaro1, passaro2].forEach((p, i) => {
+        this.passarinhosVisuais = [passaro1, passaro2];
+        this.passarinhosVisuais.forEach((p, i) => {
             this.tweens.add({
                 targets: p,
                 y: p.y - 8,
@@ -95,6 +96,33 @@ class MenuScene extends Phaser.Scene {
             fontStyle: 'italic',
             color: '#e8e2d5'
         }).setOrigin(0.5).setAlpha(0.85);
+
+        // trilha de quintal: musiquinha de fundo + passarinho cantando + cachorro latindo ao longe
+        MusicaFundo.iniciar();
+        this.agendarSomAmbiente();
+
+        // ao sair do menu (troca de scene), corta os agendamentos pra não vazar som pra próxima tela
+        this.events.once('shutdown', () => {
+            MusicaFundo.parar();
+            if (this.timerPassarinho) this.timerPassarinho.remove();
+            if (this.timerCachorro) this.timerCachorro.remove();
+        });
+    }
+
+    agendarSomAmbiente() {
+        const proximoPassarinho = () => {
+            SomFX.passarinho();
+            const ave = Phaser.Utils.Array.GetRandom(this.passarinhosVisuais);
+            this.tweens.add({ targets: ave, scaleX: 1.25, scaleY: 0.8, duration: 90, yoyo: true });
+            this.timerPassarinho = this.time.delayedCall(Phaser.Math.Between(2500, 5500), proximoPassarinho);
+        };
+        this.timerPassarinho = this.time.delayedCall(Phaser.Math.Between(1200, 2500), proximoPassarinho);
+
+        const proximoCachorro = () => {
+            SomFX.cachorro();
+            this.timerCachorro = this.time.delayedCall(Phaser.Math.Between(8000, 16000), proximoCachorro);
+        };
+        this.timerCachorro = this.time.delayedCall(Phaser.Math.Between(4000, 9000), proximoCachorro);
     }
 
     criarBotaoComecar(x, y) {

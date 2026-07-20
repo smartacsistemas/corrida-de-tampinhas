@@ -119,6 +119,128 @@ const SomFX = {
             osc.start(t);
             osc.stop(t + 0.4);
         });
+    },
+
+    // piado curto, 2 ou 3 bicadas de pitch subindo/descendo — passarinho no quintal
+    passarinho() {
+        this.iniciar();
+        const t = this.ctx.currentTime;
+        const bicos = Phaser.Math.Between(2, 3);
+
+        for (let i = 0; i < bicos; i++) {
+            const inicio = t + i * 0.09;
+            const freqBase = Phaser.Math.Between(2200, 3200);
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freqBase, inicio);
+            osc.frequency.exponentialRampToValueAtTime(freqBase * 1.4, inicio + 0.03);
+            osc.frequency.exponentialRampToValueAtTime(freqBase * 0.8, inicio + 0.07);
+
+            gain.gain.setValueAtTime(0.0001, inicio);
+            gain.gain.linearRampToValueAtTime(0.12, inicio + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.08);
+
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start(inicio);
+            osc.stop(inicio + 0.1);
+        }
+    },
+
+    // "au au" — ruído grave filtrado + tom descendente, longe, discreto
+    cachorro() {
+        this.iniciar();
+        const t = this.ctx.currentTime;
+        const latidos = Phaser.Math.Between(1, 2);
+
+        for (let i = 0; i < latidos; i++) {
+            const inicio = t + i * 0.22;
+
+            const ruido = this.ctx.createBufferSource();
+            ruido.buffer = this.criarRuido(0.12);
+
+            const filtro = this.ctx.createBiquadFilter();
+            filtro.type = 'lowpass';
+            filtro.frequency.setValueAtTime(900, inicio);
+
+            const gainRuido = this.ctx.createGain();
+            gainRuido.gain.setValueAtTime(0.18, inicio);
+            gainRuido.gain.exponentialRampToValueAtTime(0.001, inicio + 0.12);
+
+            ruido.connect(filtro).connect(gainRuido).connect(this.ctx.destination);
+            ruido.start(inicio);
+            ruido.stop(inicio + 0.12);
+
+            const osc = this.ctx.createOscillator();
+            const gainOsc = this.ctx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(280, inicio);
+            osc.frequency.exponentialRampToValueAtTime(120, inicio + 0.12);
+
+            gainOsc.gain.setValueAtTime(0.001, inicio);
+            gainOsc.gain.linearRampToValueAtTime(0.14, inicio + 0.015);
+            gainOsc.gain.exponentialRampToValueAtTime(0.001, inicio + 0.14);
+
+            osc.connect(gainOsc).connect(this.ctx.destination);
+            osc.start(inicio);
+            osc.stop(inicio + 0.15);
+        }
+    }
+};
+
+// ---------- Musiquinha de fundo do menu: melodia pentatônica gerada nota a nota ----------
+// Sem arquivo de música — cada nota é um tom sintetizado e agendado com pequenas variações,
+// pra soar mais como um chocalho/caixinha de música do que uma trilha "de jogo".
+const MusicaFundo = {
+    tocando: false,
+    proximoTimer: null,
+    notas: [261.63, 293.66, 329.63, 392.00, 440.00, 523.25], // escala pentatônica (dó ré mi sol lá dó)
+
+    tocarNota(freq, duracao, volume) {
+        SomFX.iniciar();
+        const t = SomFX.ctx.currentTime;
+
+        const osc = SomFX.ctx.createOscillator();
+        const gain = SomFX.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(volume, t + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + duracao);
+
+        osc.connect(gain).connect(SomFX.ctx.destination);
+        osc.start(t);
+        osc.stop(t + duracao + 0.05);
+    },
+
+    agendarProximaNota() {
+        if (!this.tocando) return;
+
+        const freq = Phaser.Utils.Array.GetRandom(this.notas);
+        const duracao = Phaser.Math.FloatBetween(0.7, 1.3);
+        this.tocarNota(freq, duracao, 0.045);
+
+        const espera = Phaser.Math.Between(600, 1000);
+        this.proximoTimer = setTimeout(() => this.agendarProximaNota(), espera);
+    },
+
+    iniciar() {
+        if (this.tocando) return;
+        this.tocando = true;
+        this.agendarProximaNota();
+    },
+
+    parar() {
+        this.tocando = false;
+        if (this.proximoTimer) {
+            clearTimeout(this.proximoTimer);
+            this.proximoTimer = null;
+        }
     }
 };
 
