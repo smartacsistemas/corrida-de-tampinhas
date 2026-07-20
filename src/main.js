@@ -121,6 +121,52 @@ const SomFX = {
         });
     },
 
+    // "shhhlip" — água da mangueira fazendo a tampinha escorregar
+    escorregar() {
+        this.iniciar();
+        const t = this.ctx.currentTime;
+
+        const ruido = this.ctx.createBufferSource();
+        ruido.buffer = this.criarRuido(0.3);
+
+        const filtro = this.ctx.createBiquadFilter();
+        filtro.type = 'bandpass';
+        filtro.frequency.setValueAtTime(1800, t);
+        filtro.frequency.exponentialRampToValueAtTime(500, t + 0.3);
+        filtro.Q.setValueAtTime(1.2, t);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.linearRampToValueAtTime(0.22, t + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+        ruido.connect(filtro).connect(gain).connect(this.ctx.destination);
+        ruido.start(t);
+        ruido.stop(t + 0.3);
+    },
+
+    // dois tons descendentes — "ops, saiu da pista"
+    foraDaPista() {
+        this.iniciar();
+        const t = this.ctx.currentTime;
+        [420, 300].forEach((freq, i) => {
+            const inicio = t + i * 0.09;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, inicio);
+
+            gain.gain.setValueAtTime(0.0001, inicio);
+            gain.gain.linearRampToValueAtTime(0.1, inicio + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.13);
+
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start(inicio);
+            osc.stop(inicio + 0.14);
+        });
+    },
+
     // piado curto, 2 ou 3 bicadas de pitch subindo/descendo — passarinho no quintal
     passarinho() {
         this.iniciar();
@@ -442,26 +488,37 @@ function pontoNaElipse(cx, cy, raioX, raioY, angulo) {
     };
 }
 
-// desenha a pista oval como se fosse riscada de giz: um anel entre a elipse externa e a "ilha" central
-function desenharPistaOval(scene, pista) {
-    const { centro, raioXExterno, raioYExterno, raioXInterno, raioYInterno } = pista;
+// desenha a pista curvilínea como se fosse riscada de giz: um anel entre a borda externa e a "ilha"
+// central, ambas com raio variável por ângulo (pista.raioXExt/raioYExt/raioXInt/raioYInt), o que
+// cria as curvas — bem diferente de uma oval simples e lisa.
+function desenharPista(scene, pista) {
+    const { centro } = pista;
+    const passos = 160;
 
     // leve tingimento do anel (a pista em si), sem poluir o fundo de cimento
     const fundo = scene.add.graphics();
     fundo.fillStyle(0xffffff, 0.05);
-    fundo.fillEllipse(centro.x, centro.y, raioXExterno * 2, raioYExterno * 2);
+    const pontosExt = [];
+    const pontosInt = [];
+    for (let i = 0; i <= passos; i++) {
+        const angulo = (Math.PI * 2 / passos) * i;
+        pontosExt.push(pontoNaElipse(centro.x, centro.y, pista.raioXExt(angulo), pista.raioYExt(angulo), angulo));
+    }
+    fundo.fillPoints(pontosExt, true);
     fundo.fillStyle(0x000000, 0.12);
-    fundo.fillEllipse(centro.x, centro.y, raioXInterno * 2, raioYInterno * 2);
+    for (let i = 0; i <= passos; i++) {
+        const angulo = (Math.PI * 2 / passos) * i;
+        pontosInt.push(pontoNaElipse(centro.x, centro.y, pista.raioXInt(angulo), pista.raioYInt(angulo), angulo));
+    }
+    fundo.fillPoints(pontosInt, true);
 
-    const contorno = (raioX, raioY) => {
+    const contorno = (raioXFn, raioYFn) => {
         const g = scene.add.graphics();
         g.lineStyle(4, 0xffffff, 0.85);
-
-        const passos = 90;
         g.beginPath();
         for (let i = 0; i <= passos; i++) {
             const angulo = (Math.PI * 2 / passos) * i;
-            const p = pontoNaElipse(centro.x, centro.y, raioX, raioY, angulo);
+            const p = pontoNaElipse(centro.x, centro.y, raioXFn(angulo), raioYFn(angulo), angulo);
             const jx = p.x + Phaser.Math.Between(-2, 2);
             const jy = p.y + Phaser.Math.Between(-2, 2);
             if (i === 0) g.moveTo(jx, jy); else g.lineTo(jx, jy);
@@ -469,12 +526,12 @@ function desenharPistaOval(scene, pista) {
         g.strokePath();
     };
 
-    contorno(raioXExterno, raioYExterno);
-    contorno(raioXInterno, raioYInterno);
+    contorno(pista.raioXExt, pista.raioYExt);
+    contorno(pista.raioXInt, pista.raioYInt);
 
-    // linha de chegada — risco perpendicular à pista, no ângulo 0 (lado direito do oval)
-    const externo = pontoNaElipse(centro.x, centro.y, raioXExterno, raioYExterno, 0);
-    const interno = pontoNaElipse(centro.x, centro.y, raioXInterno, raioYInterno, 0);
+    // linha de chegada — risco perpendicular à pista, no ângulo 0
+    const externo = pontoNaElipse(centro.x, centro.y, pista.raioXExt(0), pista.raioYExt(0), 0);
+    const interno = pontoNaElipse(centro.x, centro.y, pista.raioXInt(0), pista.raioYInt(0), 0);
     const segmentos = 8;
     for (let i = 0; i < segmentos; i++) {
         const t0 = i / segmentos;
@@ -489,46 +546,239 @@ function desenharPistaOval(scene, pista) {
     }
 }
 
-// pedra maior, usada como obstáculo físico no meio da pista (não confundir com a decorativa)
-function criarTexturaObstaculo(scene) {
-    const chave = 'obstaculo_pedra';
+// desenha a poça d'água + mangueira que atravessa a pista numa faixa angular estreita
+function desenharZonaAgua(scene, pista, zona) {
+    const { centro } = pista;
+    const passos = 16;
+
+    const g = scene.add.graphics();
+    g.fillStyle(0x3f9fd6, 0.3);
+    const pontos = [];
+    for (let i = 0; i <= passos; i++) {
+        const a = zona.angulo - zona.meiaLargura + (2 * zona.meiaLargura) * (i / passos);
+        pontos.push(pontoNaElipse(centro.x, centro.y, pista.raioXExt(a), pista.raioYExt(a), a));
+    }
+    for (let i = passos; i >= 0; i--) {
+        const a = zona.angulo - zona.meiaLargura + (2 * zona.meiaLargura) * (i / passos);
+        pontos.push(pontoNaElipse(centro.x, centro.y, pista.raioXInt(a), pista.raioYInt(a), a));
+    }
+    g.fillPoints(pontos, true);
+
+    // reflexo ondulado da luz na água
+    g.lineStyle(2, 0xffffff, 0.4);
+    for (let l = 0; l < 3; l++) {
+        g.beginPath();
+        for (let i = 0; i <= passos; i++) {
+            const t = i / passos;
+            const a = zona.angulo - zona.meiaLargura * 0.7 + zona.meiaLargura * 1.4 * t;
+            const frac = 0.28 + l * 0.22;
+            const rx = Phaser.Math.Linear(pista.raioXInt(a), pista.raioXExt(a), frac);
+            const ry = Phaser.Math.Linear(pista.raioYInt(a), pista.raioYExt(a), frac);
+            const p = pontoNaElipse(centro.x, centro.y, rx, ry, a);
+            if (i === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y);
+        }
+        g.strokePath();
+    }
+
+    // mangueira enrolada do lado de fora, perto do bico
+    const posMangueira = pontoNaElipse(centro.x, centro.y, pista.raioXExt(zona.angulo) + 34, pista.raioYExt(zona.angulo) + 34, zona.angulo);
+    scene.add.image(posMangueira.x, posMangueira.y, criarTexturaMangueira(scene));
+
+    // bico da mangueira na borda externa da pista, apontando pra dentro
+    const pExt = pontoNaElipse(centro.x, centro.y, pista.raioXExt(zona.angulo), pista.raioYExt(zona.angulo), zona.angulo);
+    scene.add.image(pExt.x, pExt.y, criarTexturaBicoMangueira(scene)).setRotation(zona.angulo + Math.PI / 2).setDepth(1);
+}
+
+// vasinho de planta — decoração de quintal de verdade
+function criarTexturaVaso(scene) {
+    const chave = 'decor_vaso';
     if (scene.textures.exists(chave)) return chave;
 
-    const tam = 56;
+    const w = 28, h = 34;
     const g = scene.add.graphics();
 
-    g.fillStyle(0x000000, 0.2);
-    g.fillEllipse(tam / 2 + 3, tam / 2 + 6, tam * 0.8, tam * 0.35);
+    // vaso de barro (trapézio)
+    g.fillStyle(0xb0602f, 1);
+    g.fillPoints([
+        { x: 6, y: h - 2 }, { x: w - 6, y: h - 2 },
+        { x: w - 4, y: h - 16 }, { x: 4, y: h - 16 }
+    ], true);
+    g.lineStyle(2, 0x8a4a22, 0.7);
+    g.lineBetween(4, h - 16, w - 4, h - 16);
 
-    g.fillStyle(0x726b61, 1);
-    g.fillCircle(tam / 2, tam / 2, tam / 2 - 4);
-    g.fillStyle(0x8f877a, 1);
-    g.fillEllipse(tam / 2 - 6, tam / 2 - 8, tam * 0.35, tam * 0.22);
-    g.lineStyle(2, 0x4a453d, 0.5);
-    g.strokeCircle(tam / 2, tam / 2, tam / 2 - 4);
+    // planta (folhas verdes irregulares saindo do vaso)
+    g.fillStyle(0x3f8f3f, 1);
+    [[-8, -4], [0, -10], [8, -3], [-3, -8]].forEach(([dx, dy]) => {
+        g.fillEllipse(w / 2 + dx, h - 16 + dy, 12, 8);
+    });
+    g.fillStyle(0x5cb85c, 0.9);
+    g.fillEllipse(w / 2, h - 22, 10, 7);
 
+    g.generateTexture(chave, w, h);
+    g.destroy();
+    return chave;
+}
+
+// tijolo — usado como bordinha decorativa do quintal
+function criarTexturaTijolo(scene) {
+    const chave = 'decor_tijolo';
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(0xa8492f, 1);
+    g.fillRoundedRect(0, 0, 22, 11, 2);
+    g.lineStyle(1, 0x7a3320, 0.6);
+    g.strokeRoundedRect(0, 0, 22, 11, 2);
+    g.generateTexture(chave, 22, 11);
+    g.destroy();
+    return chave;
+}
+
+// chinelo havaiana esquecido no quintal
+function criarTexturaChinelo(scene) {
+    const chave = 'decor_chinelo';
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(0x2980b9, 1);
+    g.fillEllipse(12, 15, 18, 26);
+    g.lineStyle(2, 0xf1c40f, 0.9);
+    g.beginPath();
+    g.moveTo(12, 6);
+    g.lineTo(5, 15);
+    g.moveTo(12, 6);
+    g.lineTo(19, 15);
+    g.strokePath();
+    g.generateTexture(chave, 24, 30);
+    g.destroy();
+    return chave;
+}
+
+// touceira de grama — tufo de grama crescendo entre as rachaduras do cimento
+function criarTexturaTouceira(scene) {
+    const chave = 'decor_touceira';
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    for (let i = 0; i < 7; i++) {
+        const x = 3 + i * 2.4 + Phaser.Math.FloatBetween(-1, 1);
+        const alt = Phaser.Math.Between(8, 16);
+        g.lineStyle(2, Phaser.Display.Color.GetColor(
+            Phaser.Math.Between(60, 90), Phaser.Math.Between(120, 160), Phaser.Math.Between(40, 70)
+        ), 0.85);
+        g.beginPath();
+        g.moveTo(x, 20);
+        g.lineTo(x + Phaser.Math.FloatBetween(-3, 3), 20 - alt);
+        g.strokePath();
+    }
+    g.generateTexture(chave, 20, 20);
+    g.destroy();
+    return chave;
+}
+
+// mangueira de jardim enrolada — fica do lado de fora da pista, perto do bico que molha a pista
+function criarTexturaMangueira(scene) {
+    const chave = 'decor_mangueira';
+    if (scene.textures.exists(chave)) return chave;
+
+    const tam = 46;
+    const g = scene.add.graphics();
+    g.lineStyle(6, 0x1e7a3a, 1);
+    g.beginPath();
+    g.arc(tam / 2, tam / 2, 16, 0, Math.PI * 1.7);
+    g.strokePath();
+    g.lineStyle(6, 0x249c4a, 1);
+    g.beginPath();
+    g.arc(tam / 2, tam / 2, 9, Math.PI * 0.2, Math.PI * 2);
+    g.strokePath();
+    g.fillStyle(0xcccccc, 1);
+    g.fillCircle(tam / 2, tam / 2, 4);
     g.generateTexture(chave, tam, tam);
     g.destroy();
     return chave;
 }
 
-// espalha folhas e pedrinhas nas margens ao redor da pista
-function espalharDecoracao(scene) {
-    const decorTipos = [criarTexturaFolha(scene), criarTexturaPedra(scene)];
+// bico da mangueira, bem na beira da pista, de onde sai o fiozinho d'água
+function criarTexturaBicoMangueira(scene) {
+    const chave = 'decor_bico_mangueira';
+    if (scene.textures.exists(chave)) return chave;
 
-    for (let i = 0; i < 10; i++) {
+    const g = scene.add.graphics();
+    g.fillStyle(0x555555, 1);
+    g.fillRoundedRect(0, 4, 20, 8, 3);
+    g.fillStyle(0x333333, 1);
+    g.fillCircle(18, 8, 5);
+    g.generateTexture(chave, 24, 16);
+    g.destroy();
+    return chave;
+}
+
+// espalha folhas, pedrinhas, vasos, tijolos, chinelo e grama nas margens ao redor da pista —
+// deixando o quintal com cara de quintal de verdade, não só de fundo cinza vazio.
+function espalharDecoracao(scene) {
+    const miudos = [criarTexturaFolha(scene), criarTexturaPedra(scene)];
+
+    for (let i = 0; i < 14; i++) {
         const zona = Phaser.Math.Between(0, 3);
         let x, y;
 
-        if (zona === 0) { x = Phaser.Math.Between(10, 790); y = Phaser.Math.Between(10, 75); }
-        else if (zona === 1) { x = Phaser.Math.Between(10, 790); y = Phaser.Math.Between(515, 590); }
-        else if (zona === 2) { x = Phaser.Math.Between(5, 32); y = Phaser.Math.Between(95, 505); }
-        else { x = Phaser.Math.Between(768, 795); y = Phaser.Math.Between(95, 505); }
+        if (zona === 0) { x = Phaser.Math.Between(10, 790); y = Phaser.Math.Between(8, 78); }
+        else if (zona === 1) { x = Phaser.Math.Between(10, 790); y = Phaser.Math.Between(512, 592); }
+        else if (zona === 2) { x = Phaser.Math.Between(4, 30); y = Phaser.Math.Between(90, 510); }
+        else { x = Phaser.Math.Between(770, 796); y = Phaser.Math.Between(90, 510); }
 
-        const tipo = Phaser.Utils.Array.GetRandom(decorTipos);
+        const tipo = Phaser.Utils.Array.GetRandom(miudos);
         scene.add.image(x, y, tipo)
             .setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2))
             .setAlpha(0.85);
+    }
+
+    // touceiras de grama crescendo pelas fresta do cimento
+    for (let i = 0; i < 8; i++) {
+        const zona = Phaser.Math.Between(0, 3);
+        let x, y;
+        if (zona === 0) { x = Phaser.Math.Between(20, 780); y = Phaser.Math.Between(4, 40); }
+        else if (zona === 1) { x = Phaser.Math.Between(20, 780); y = Phaser.Math.Between(560, 596); }
+        else if (zona === 2) { x = Phaser.Math.Between(2, 20); y = Phaser.Math.Between(100, 500); }
+        else { x = Phaser.Math.Between(780, 798); y = Phaser.Math.Between(100, 500); }
+        scene.add.image(x, y, criarTexturaTouceira(scene)).setAlpha(0.9);
+    }
+
+    // vasos de planta e um chinelo esquecido, só nos cantos, sem atrapalhar a pista
+    const cantos = [
+        { x: 34, y: 34 }, { x: 766, y: 34 }, { x: 34, y: 566 }, { x: 766, y: 566 }
+    ];
+    Phaser.Utils.Array.Shuffle(cantos).slice(0, 3).forEach(pos => {
+        scene.add.image(pos.x, pos.y, criarTexturaVaso(scene)).setRotation(Phaser.Math.FloatBetween(-0.08, 0.08));
+    });
+    const cantoChinelo = cantos[3] || { x: 766, y: 566 };
+    scene.add.image(cantoChinelo.x + 14, cantoChinelo.y + 6, criarTexturaChinelo(scene))
+        .setRotation(Phaser.Math.FloatBetween(-0.5, 0.5)).setAlpha(0.9);
+
+    // fileira de tijolinhos decorando um canto, como bordinha de jardim
+    const chaveTijolo = criarTexturaTijolo(scene);
+    const cantoTijolo = Phaser.Utils.Array.GetRandom(['topo', 'base']);
+    for (let i = 0; i < 5; i++) {
+        const x = 60 + i * 24;
+        const y = cantoTijolo === 'topo' ? 14 : 586;
+        scene.add.image(x, y, chaveTijolo).setRotation(Phaser.Math.FloatBetween(-0.05, 0.05));
+    }
+}
+
+// decora a ilha central com um vasinho e algumas pedrinhas, dando vida ao miolo da pista
+function decorarIlhaCentral(scene, pista) {
+    const raioMedioX = (pista.raioXInt(0) + pista.raioXInt(Math.PI / 2)) / 2 * 0.5;
+    const raioMedioY = (pista.raioYInt(0) + pista.raioYInt(Math.PI / 2)) / 2 * 0.5;
+
+    scene.add.image(pista.centro.x, pista.centro.y - raioMedioY * 0.3, criarTexturaVaso(scene)).setScale(0.9);
+
+    for (let i = 0; i < 4; i++) {
+        const angulo = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const r = Phaser.Math.FloatBetween(0.2, 0.7);
+        const x = pista.centro.x + Math.cos(angulo) * raioMedioX * r;
+        const y = pista.centro.y + Math.sin(angulo) * raioMedioY * r;
+        scene.add.image(x, y, criarTexturaPedra(scene)).setAlpha(0.8)
+            .setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
     }
 }
 class CorridaScene extends Phaser.Scene {
@@ -543,22 +793,28 @@ class CorridaScene extends Phaser.Scene {
         this.vencedor = null;
         this.corridaLiberada = false;
 
-        // pista oval: um anel entre a elipse externa e a "ilha" central (que também é obstáculo)
-        const ESCALA_ILHA = 0.45;
-        const raioXExterno = 300;
-        const raioYExterno = 210;
+        // pista grande e cheia de curvas: um anel entre uma borda externa ondulada e a "ilha"
+        // central (decorativa, sem bloquear a passagem), com largura generosa e constante para
+        // as tampinhas sempre terem espaço de sobra pra passar.
+        const centro = { x: 400, y: 300 };
+        const LARGURA_X = 150;
+        const LARGURA_Y = 108;
 
-        this.pista = {
-            centro: { x: 400, y: 330 },
-            raioXExterno,
-            raioYExterno,
-            raioXInterno: raioXExterno * ESCALA_ILHA,
-            raioYInterno: raioYExterno * ESCALA_ILHA
-        };
+        const raioXExt = (angulo) => 300 + 50 * Math.sin(2 * angulo + 0.4) + 22 * Math.sin(5 * angulo - 0.8);
+        const raioYExt = (angulo) => 205 + 38 * Math.sin(3 * angulo - 0.3) + 16 * Math.sin(6 * angulo + 1.1);
+        const raioXInt = (angulo) => raioXExt(angulo) - LARGURA_X;
+        const raioYInt = (angulo) => raioYExt(angulo) - LARGURA_Y;
+
+        this.pista = { centro, raioXExt, raioYExt, raioXInt, raioYInt };
+
+        // faixa estreita, num ponto do trajeto, onde a mangueira liga e molha a pista:
+        // devagar ali, a tampinha escorrega pro lado; com um peteleco decidido ela atravessa numa boa.
+        this.zonaAgua = { angulo: Math.PI * 0.5, meiaLargura: 0.11, limiarVelocidade: 130 };
 
         this.FORCA_MAXIMA = 600;
         this.DISTANCIA_MAXIMA = 120;
         this.VELOCIDADE_MINIMA_PARADA = 4;
+        this.RETROCESSO_FORA_DA_PISTA = 0.3; // ~17°, "alguns metros" de volta quando sai da pista
 
         const marcasParaIA = MARCAS_DISPONIVEIS.filter(m => m.nome !== JogoState.marcaJogador);
         const marcaIA = Phaser.Utils.Array.GetRandom(marcasParaIA);
@@ -568,15 +824,20 @@ class CorridaScene extends Phaser.Scene {
 
         this.add.image(400, 300, criarTexturaCimento(this));
         espalharDecoracao(this);
-        desenharPistaOval(this, this.pista);
+        desenharPista(this, this.pista);
+        decorarIlhaCentral(this, this.pista);
+        desenharZonaAgua(this, this.pista, this.zonaAgua);
 
         // ---------- paredes físicas do anel (invisíveis, seguem o desenho de giz) ----------
+        // nada de pedras soltas no meio do caminho — só as bordas da própria pista, então a
+        // tampinha sempre tem passagem livre; a única coisa que atrapalha agora é a pista
+        // (e a poça d'água) em si, não obstáculos artificiais.
         const paredes = this.physics.add.staticGroup();
 
-        const criarParedeCircular = (raioX, raioY, quantidade, raioColisor) => {
+        const criarParedeCurva = (raioXFn, raioYFn, quantidade, raioColisor) => {
             for (let i = 0; i < quantidade; i++) {
                 const angulo = (Math.PI * 2 / quantidade) * i;
-                const p = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, raioX, raioY, angulo);
+                const p = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, raioXFn(angulo), raioYFn(angulo), angulo);
                 const bloco = this.add.circle(p.x, p.y, raioColisor, 0xffffff, 0);
                 this.physics.add.existing(bloco, true);
                 bloco.body.setCircle(raioColisor);
@@ -584,29 +845,16 @@ class CorridaScene extends Phaser.Scene {
             }
         };
 
-        // parede externa (não deixa fugir da pista) e parede da ilha central (o obstáculo do meio)
-        criarParedeCircular(this.pista.raioXExterno, this.pista.raioYExterno, 60, 20);
-        criarParedeCircular(this.pista.raioXInterno, this.pista.raioYInterno, 36, 16);
+        // parede externa (não deixa fugir da pista) e parede da ilha central — mais segmentos
+        // que antes porque a pista agora faz curvas, então precisa de mais "tijolinhos" de
+        // colisão pra acompanhar direitinho o contorno sem deixar brecha.
+        criarParedeCurva(this.pista.raioXExt, this.pista.raioYExt, 140, 22);
+        criarParedeCurva(this.pista.raioXInt, this.pista.raioYInt, 100, 18);
 
-        // ---------- obstáculos extras espalhados no meio do caminho do anel ----------
-        const chaveObstaculo = criarTexturaObstaculo(this);
-        const angulosObstaculos = [50, 160, 260]; // graus
-        angulosObstaculos.forEach(graus => {
-            const angulo = Phaser.Math.DegToRad(graus);
-            const pExterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXExterno, this.pista.raioYExterno, angulo);
-            const pInterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXInterno, this.pista.raioYInterno, angulo);
-            const meio = { x: (pExterno.x + pInterno.x) / 2, y: (pExterno.y + pInterno.y) / 2 };
-
-            const obstaculo = this.add.image(meio.x, meio.y, chaveObstaculo);
-            this.physics.add.existing(obstaculo, true);
-            obstaculo.body.setCircle(20, obstaculo.width / 2 - 20, obstaculo.height / 2 - 20);
-            paredes.add(obstaculo);
-        });
-
-        // ---------- tampinhas na largada, lado a lado, no ângulo 180° (lado esquerdo do oval) ----------
+        // ---------- tampinhas na largada, lado a lado, no ângulo 180° ----------
         const anguloLargada = Math.PI;
-        const pontoLargadaExterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXExterno, this.pista.raioYExterno, anguloLargada);
-        const pontoLargadaInterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXInterno, this.pista.raioYInterno, anguloLargada);
+        const pontoLargadaExterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXExt(anguloLargada), this.pista.raioYExt(anguloLargada), anguloLargada);
+        const pontoLargadaInterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXInt(anguloLargada), this.pista.raioYInt(anguloLargada), anguloLargada);
 
         const posicoesLargada = [
             { x: Phaser.Math.Linear(pontoLargadaInterno.x, pontoLargadaExterno.x, 0.35), y: Phaser.Math.Linear(pontoLargadaInterno.y, pontoLargadaExterno.y, 0.35) },
@@ -631,6 +879,9 @@ class CorridaScene extends Phaser.Scene {
             t.sombra = sombra;
             t.voltaAcumulada = 0;
             t.anguloAnterior = Math.atan2(pos.y - this.pista.centro.y, pos.x - this.pista.centro.x);
+            t.posicaoSegura = { x: pos.x, y: pos.y, angulo: t.anguloAnterior };
+            t.emPenalidade = false;
+            t.molhando = false;
 
             t.rastro = this.add.particles(0, 0, criarTexturaParticula(this, 'particulaRastro_' + marca.nome.replace(/\s+/g, '_'), marca.cor), {
                 lifespan: 250,
@@ -862,6 +1113,63 @@ class CorridaScene extends Phaser.Scene {
         }
     }
 
+    // mantém um ângulo dentro de [-π, π]
+    normalizarAngulo(a) {
+        while (a > Math.PI) a -= Math.PI * 2;
+        while (a < -Math.PI) a += Math.PI * 2;
+        return a;
+    }
+
+    // verifica se um ponto (x,y) está dentro do anel da pista naquele ângulo específico —
+    // como a pista é curvilínea, o raio "aceitável" muda a cada ângulo.
+    calcularStatusNaPista(x, y) {
+        const dx = x - this.pista.centro.x;
+        const dy = y - this.pista.centro.y;
+        const theta = Math.atan2(dy, dx);
+
+        const rx = this.pista.raioXExt(theta), ry = this.pista.raioYExt(theta);
+        const rxi = this.pista.raioXInt(theta), ryi = this.pista.raioYInt(theta);
+
+        const nExt = Math.sqrt((dx / rx) ** 2 + (dy / ry) ** 2);
+        const nInt = Math.sqrt((dx / rxi) ** 2 + (dy / ryi) ** 2);
+
+        return { theta, nExt, nInt, dentro: nExt <= 1.03 && nInt >= 0.97 };
+    }
+
+    // a tampinha saiu da pista: toca o efeito, treme a câmera e a puxa de volta alguns "metros"
+    // no sentido contrário ao avanço — isso é o que desestimula petelecos fortes demais.
+    aplicarPenalidadeForaDaPista(t, status) {
+        t.emPenalidade = true;
+        SomFX.foraDaPista();
+        this.cameras.main.shake(150, 0.008);
+
+        const anguloDePartida = t.posicaoSegura ? t.posicaoSegura.angulo : status.theta;
+        const anguloRecuo = anguloDePartida - this.RETROCESSO_FORA_DA_PISTA;
+
+        const rMedioX = (this.pista.raioXExt(anguloRecuo) + this.pista.raioXInt(anguloRecuo)) / 2;
+        const rMedioY = (this.pista.raioYExt(anguloRecuo) + this.pista.raioYInt(anguloRecuo)) / 2;
+        const novaPos = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, rMedioX, rMedioY, anguloRecuo);
+
+        const deltaRecuo = this.normalizarAngulo(anguloRecuo - status.theta);
+        t.voltaAcumulada += deltaRecuo;
+        t.anguloAnterior = anguloRecuo;
+        t.posicaoSegura = { x: novaPos.x, y: novaPos.y, angulo: anguloRecuo };
+
+        t.body.setVelocity(0, 0);
+        t.x = novaPos.x;
+        t.y = novaPos.y;
+
+        // borrifo de partículas marcando o "escorregão"
+        const respingo = this.add.particles(status.theta !== undefined ? t.x : t.x, t.y,
+            criarTexturaParticula(this, 'particulaAgua', 0x3f9fd6), {
+                lifespan: 400, speed: { min: 60, max: 160 }, scale: { start: 0.8, end: 0 },
+                alpha: { start: 0.8, end: 0 }, quantity: 12, emitting: false
+            });
+        respingo.explode(12);
+
+        this.time.delayedCall(400, () => { t.emPenalidade = false; });
+    }
+
     update() {
         this.tampinhas.forEach(t => {
             if (t.sombra) {
@@ -886,7 +1194,39 @@ class CorridaScene extends Phaser.Scene {
         // progresso na volta: acumula o ângulo percorrido ao redor do centro da pista.
         // uma volta completa (2π líquidos) = vitória. Vai e vem se cancela — só conta avanço de verdade.
         this.tampinhas.forEach(t => {
-            const anguloAtual = Math.atan2(t.y - this.pista.centro.y, t.x - this.pista.centro.x);
+            const status = this.calcularStatusNaPista(t.x, t.y);
+
+            // fora da pista → penaliza e volta alguns metros, sem contar o avanço normal deste quadro
+            if (!status.dentro && !t.emPenalidade) {
+                this.aplicarPenalidadeForaDaPista(t, status);
+                return;
+            }
+            if (status.dentro) {
+                t.posicaoSegura = { x: t.x, y: t.y, angulo: status.theta };
+            }
+
+            // zona molhada da mangueira: devagar ali, a água empurra a tampinha pra fora da pista
+            if (status.dentro && t.body) {
+                const diffZona = this.normalizarAngulo(status.theta - this.zonaAgua.angulo);
+                if (Math.abs(diffZona) < this.zonaAgua.meiaLargura) {
+                    const velocidade = Phaser.Math.Distance.Between(0, 0, t.body.velocity.x, t.body.velocity.y);
+                    if (velocidade > 4 && velocidade < this.zonaAgua.limiarVelocidade) {
+                        const fatorEscorregao = 1 - (velocidade / this.zonaAgua.limiarVelocidade);
+                        const direcaoRadial = Math.atan2(t.y - this.pista.centro.y, t.x - this.pista.centro.x);
+                        const empurrao = fatorEscorregao * 5.5;
+                        t.body.velocity.x += Math.cos(direcaoRadial) * empurrao;
+                        t.body.velocity.y += Math.sin(direcaoRadial) * empurrao;
+
+                        if (!t.molhando) {
+                            t.molhando = true;
+                            SomFX.escorregar();
+                            this.time.delayedCall(500, () => { t.molhando = false; });
+                        }
+                    }
+                }
+            }
+
+            const anguloAtual = status.theta;
             let delta = anguloAtual - t.anguloAnterior;
             if (delta > Math.PI) delta -= Math.PI * 2;
             if (delta < -Math.PI) delta += Math.PI * 2;
