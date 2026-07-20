@@ -434,35 +434,82 @@ function criarTexturaMadeira(scene) {
 }
 
 // desenha a pista como se fosse riscada de giz (borda levemente irregular)
-function desenharPistaGiz(scene, pista) {
-    const g = scene.add.graphics();
-    g.lineStyle(4, 0xffffff, 0.85);
+// devolve um ponto sobre uma elipse centrada em (cx, cy), no ângulo dado (radianos)
+function pontoNaElipse(cx, cy, raioX, raioY, angulo) {
+    return {
+        x: cx + Math.cos(angulo) * raioX,
+        y: cy + Math.sin(angulo) * raioY
+    };
+}
 
-    const pontos = [
-        { x: pista.x, y: pista.y },
-        { x: pista.x + pista.largura, y: pista.y },
-        { x: pista.x + pista.largura, y: pista.y + pista.altura },
-        { x: pista.x, y: pista.y + pista.altura },
-        { x: pista.x, y: pista.y }
-    ];
+// desenha a pista oval como se fosse riscada de giz: um anel entre a elipse externa e a "ilha" central
+function desenharPistaOval(scene, pista) {
+    const { centro, raioXExterno, raioYExterno, raioXInterno, raioYInterno } = pista;
 
-    g.beginPath();
-    g.moveTo(pontos[0].x, pontos[0].y);
-    for (let i = 1; i < pontos.length; i++) {
-        const p0 = pontos[i - 1];
-        const p1 = pontos[i];
-        const passos = 6;
-        for (let s = 1; s <= passos; s++) {
-            const t = s / passos;
-            const x = Phaser.Math.Linear(p0.x, p1.x, t) + Phaser.Math.Between(-2, 2);
-            const y = Phaser.Math.Linear(p0.y, p1.y, t) + Phaser.Math.Between(-2, 2);
-            g.lineTo(x, y);
+    // leve tingimento do anel (a pista em si), sem poluir o fundo de cimento
+    const fundo = scene.add.graphics();
+    fundo.fillStyle(0xffffff, 0.05);
+    fundo.fillEllipse(centro.x, centro.y, raioXExterno * 2, raioYExterno * 2);
+    fundo.fillStyle(0x000000, 0.12);
+    fundo.fillEllipse(centro.x, centro.y, raioXInterno * 2, raioYInterno * 2);
+
+    const contorno = (raioX, raioY) => {
+        const g = scene.add.graphics();
+        g.lineStyle(4, 0xffffff, 0.85);
+
+        const passos = 90;
+        g.beginPath();
+        for (let i = 0; i <= passos; i++) {
+            const angulo = (Math.PI * 2 / passos) * i;
+            const p = pontoNaElipse(centro.x, centro.y, raioX, raioY, angulo);
+            const jx = p.x + Phaser.Math.Between(-2, 2);
+            const jy = p.y + Phaser.Math.Between(-2, 2);
+            if (i === 0) g.moveTo(jx, jy); else g.lineTo(jx, jy);
         }
-    }
-    g.strokePath();
+        g.strokePath();
+    };
 
-    g.fillStyle(0xffffff, 0.05);
-    g.fillRect(pista.x, pista.y, pista.largura, pista.altura);
+    contorno(raioXExterno, raioYExterno);
+    contorno(raioXInterno, raioYInterno);
+
+    // linha de chegada — risco perpendicular à pista, no ângulo 0 (lado direito do oval)
+    const externo = pontoNaElipse(centro.x, centro.y, raioXExterno, raioYExterno, 0);
+    const interno = pontoNaElipse(centro.x, centro.y, raioXInterno, raioYInterno, 0);
+    const segmentos = 8;
+    for (let i = 0; i < segmentos; i++) {
+        const t0 = i / segmentos;
+        const t1 = (i + 1) / segmentos;
+        const x0 = Phaser.Math.Linear(interno.x, externo.x, t0);
+        const y0 = Phaser.Math.Linear(interno.y, externo.y, t0);
+        const x1 = Phaser.Math.Linear(interno.x, externo.x, t1);
+        const y1 = Phaser.Math.Linear(interno.y, externo.y, t1);
+        const g = scene.add.graphics();
+        g.lineStyle(6, i % 2 === 0 ? 0x000000 : 0xffffff, 0.9);
+        g.lineBetween(x0, y0, x1, y1);
+    }
+}
+
+// pedra maior, usada como obstáculo físico no meio da pista (não confundir com a decorativa)
+function criarTexturaObstaculo(scene) {
+    const chave = 'obstaculo_pedra';
+    if (scene.textures.exists(chave)) return chave;
+
+    const tam = 56;
+    const g = scene.add.graphics();
+
+    g.fillStyle(0x000000, 0.2);
+    g.fillEllipse(tam / 2 + 3, tam / 2 + 6, tam * 0.8, tam * 0.35);
+
+    g.fillStyle(0x726b61, 1);
+    g.fillCircle(tam / 2, tam / 2, tam / 2 - 4);
+    g.fillStyle(0x8f877a, 1);
+    g.fillEllipse(tam / 2 - 6, tam / 2 - 8, tam * 0.35, tam * 0.22);
+    g.lineStyle(2, 0x4a453d, 0.5);
+    g.strokeCircle(tam / 2, tam / 2, tam / 2 - 4);
+
+    g.generateTexture(chave, tam, tam);
+    g.destroy();
+    return chave;
 }
 
 // espalha folhas e pedrinhas nas margens ao redor da pista
@@ -496,15 +543,22 @@ class CorridaScene extends Phaser.Scene {
         this.vencedor = null;
         this.corridaLiberada = false;
 
-        this.PISTA = {
-            x: 100,
-            y: 150,
-            largura: 600,
-            altura: 300
+        // pista oval: um anel entre a elipse externa e a "ilha" central (que também é obstáculo)
+        const ESCALA_ILHA = 0.45;
+        const raioXExterno = 300;
+        const raioYExterno = 210;
+
+        this.pista = {
+            centro: { x: 400, y: 330 },
+            raioXExterno,
+            raioYExterno,
+            raioXInterno: raioXExterno * ESCALA_ILHA,
+            raioYInterno: raioYExterno * ESCALA_ILHA
         };
 
         this.FORCA_MAXIMA = 600;
         this.DISTANCIA_MAXIMA = 120;
+        this.VELOCIDADE_MINIMA_PARADA = 4;
 
         const marcasParaIA = MARCAS_DISPONIVEIS.filter(m => m.nome !== JogoState.marcaJogador);
         const marcaIA = Phaser.Utils.Array.GetRandom(marcasParaIA);
@@ -512,66 +566,61 @@ class CorridaScene extends Phaser.Scene {
 
         const MARCAS_CORRIDA = [marcaJogador, marcaIA];
 
-     this.add.image(400, 300, criarTexturaCimento(this));
+        this.add.image(400, 300, criarTexturaCimento(this));
         espalharDecoracao(this);
-        desenharPistaGiz(this, this.PISTA);
-function criarTexturaMadeira(scene) {
-    const chave = 'fundo_madeira';
-    if (scene.textures.exists(chave)) return chave;
+        desenharPistaOval(this, this.pista);
 
-    const w = 800, h = 600;
-    const g = scene.add.graphics();
-
-    g.fillStyle(0x8b5a2b, 1);
-    g.fillRect(0, 0, w, h);
-
-    // veios da madeira (linhas onduladas)
-    for (let i = 0; i < 40; i++) {
-        const y = Math.random() * h;
-        const tom = Phaser.Math.Between(-20, 20);
-        const base = 90 + tom;
-        const cor = Phaser.Display.Color.GetColor(base + 50, base + 20, base - 10);
-        g.lineStyle(Phaser.Math.Between(1, 2), cor, 0.25);
-        g.beginPath();
-        g.moveTo(0, y);
-        for (let x = 0; x <= w; x += 40) {
-            g.lineTo(x, y + Math.sin(x / 60 + i) * 6);
-        }
-        g.strokePath();
-    }
-
-    // emendas de tábuas (linhas verticais mais escuras)
-    g.lineStyle(2, 0x5b3a1f, 0.4);
-    for (let x = 160; x < w; x += 160) {
-        g.lineBetween(x, 0, x, h);
-    }
-
-    g.generateTexture(chave, w, h);
-    g.destroy();
-    return chave;
-}
+        // ---------- paredes físicas do anel (invisíveis, seguem o desenho de giz) ----------
         const paredes = this.physics.add.staticGroup();
-        const espessura = 10;
-        paredes.add(this.add.rectangle(this.PISTA.x + this.PISTA.largura / 2, this.PISTA.y, this.PISTA.largura, espessura, 0xffffff, 0).setOrigin(0.5));
-        paredes.add(this.add.rectangle(this.PISTA.x + this.PISTA.largura / 2, this.PISTA.y + this.PISTA.altura, this.PISTA.largura, espessura, 0xffffff, 0).setOrigin(0.5));
-        paredes.add(this.add.rectangle(this.PISTA.x, this.PISTA.y + this.PISTA.altura / 2, espessura, this.PISTA.altura, 0xffffff, 0).setOrigin(0.5));
-        paredes.add(this.add.rectangle(this.PISTA.x + this.PISTA.largura, this.PISTA.y + this.PISTA.altura / 2, espessura, this.PISTA.altura, 0xffffff, 0).setOrigin(0.5));
 
-        this.xChegada = this.PISTA.x + this.PISTA.largura - 40;
-        this.add.rectangle(this.xChegada, this.PISTA.y + this.PISTA.altura / 2, 6, this.PISTA.altura, 0x2ecc71);
-        for (let i = 0; i < this.PISTA.altura / 20; i++) {
-            this.add.rectangle(this.xChegada, this.PISTA.y + i * 20 + 10, 6, 10, i % 2 === 0 ? 0x000000 : 0xffffff);
-        }
+        const criarParedeCircular = (raioX, raioY, quantidade, raioColisor) => {
+            for (let i = 0; i < quantidade; i++) {
+                const angulo = (Math.PI * 2 / quantidade) * i;
+                const p = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, raioX, raioY, angulo);
+                const bloco = this.add.circle(p.x, p.y, raioColisor, 0xffffff, 0);
+                this.physics.add.existing(bloco, true);
+                bloco.body.setCircle(raioColisor);
+                paredes.add(bloco);
+            }
+        };
 
-        const posY = [this.PISTA.y + 100, this.PISTA.y + 200];
+        // parede externa (não deixa fugir da pista) e parede da ilha central (o obstáculo do meio)
+        criarParedeCircular(this.pista.raioXExterno, this.pista.raioYExterno, 60, 20);
+        criarParedeCircular(this.pista.raioXInterno, this.pista.raioYInterno, 36, 16);
+
+        // ---------- obstáculos extras espalhados no meio do caminho do anel ----------
+        const chaveObstaculo = criarTexturaObstaculo(this);
+        const angulosObstaculos = [50, 160, 260]; // graus
+        angulosObstaculos.forEach(graus => {
+            const angulo = Phaser.Math.DegToRad(graus);
+            const pExterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXExterno, this.pista.raioYExterno, angulo);
+            const pInterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXInterno, this.pista.raioYInterno, angulo);
+            const meio = { x: (pExterno.x + pInterno.x) / 2, y: (pExterno.y + pInterno.y) / 2 };
+
+            const obstaculo = this.add.image(meio.x, meio.y, chaveObstaculo);
+            this.physics.add.existing(obstaculo, true);
+            obstaculo.body.setCircle(20, obstaculo.width / 2 - 20, obstaculo.height / 2 - 20);
+            paredes.add(obstaculo);
+        });
+
+        // ---------- tampinhas na largada, lado a lado, no ângulo 180° (lado esquerdo do oval) ----------
+        const anguloLargada = Math.PI;
+        const pontoLargadaExterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXExterno, this.pista.raioYExterno, anguloLargada);
+        const pontoLargadaInterno = pontoNaElipse(this.pista.centro.x, this.pista.centro.y, this.pista.raioXInterno, this.pista.raioYInterno, anguloLargada);
+
+        const posicoesLargada = [
+            { x: Phaser.Math.Linear(pontoLargadaInterno.x, pontoLargadaExterno.x, 0.35), y: Phaser.Math.Linear(pontoLargadaInterno.y, pontoLargadaExterno.y, 0.35) },
+            { x: Phaser.Math.Linear(pontoLargadaInterno.x, pontoLargadaExterno.x, 0.65), y: Phaser.Math.Linear(pontoLargadaInterno.y, pontoLargadaExterno.y, 0.65) }
+        ];
 
         for (let i = 0; i < 2; i++) {
             const marca = MARCAS_CORRIDA[i];
+            const pos = posicoesLargada[i];
 
-            const sombra = this.add.circle(this.PISTA.x + 50 + 4, posY[i] + 6, 30, 0x000000, 0.25);
+            const sombra = this.add.circle(pos.x + 4, pos.y + 6, 30, 0x000000, 0.25);
 
             const chave = criarTexturaTampinha(this, marca);
-            const t = this.add.image(this.PISTA.x + 50, posY[i], chave);
+            const t = this.add.image(pos.x, pos.y, chave);
             this.physics.add.existing(t);
             t.body.setCircle(30, 8, 8);
             t.body.setDamping(true);
@@ -580,6 +629,8 @@ function criarTexturaMadeira(scene) {
             t.nome = marca.nome;
             t.corBase = marca.cor;
             t.sombra = sombra;
+            t.voltaAcumulada = 0;
+            t.anguloAnterior = Math.atan2(pos.y - this.pista.centro.y, pos.x - this.pista.centro.x);
 
             t.rastro = this.add.particles(0, 0, criarTexturaParticula(this, 'particulaRastro_' + marca.nome.replace(/\s+/g, '_'), marca.cor), {
                 lifespan: 250,
@@ -603,22 +654,30 @@ function criarTexturaMadeira(scene) {
             Phaser.Geom.Circle.Contains
         );
         this.input.setDraggable(this.jogador);
+        this.atualizarInteratividadeJogador();
 
         this.physics.add.collider(this.tampinhas[0], this.tampinhas[1], () => {
             SomFX.colisao();
             this.cameras.main.shake(120, 0.006);
         });
-        this.tampinhas.forEach(t => this.physics.add.collider(t, paredes));
+        this.tampinhas.forEach(t => this.physics.add.collider(t, paredes, () => SomFX.colisao()));
+
+        // ---------- sistema de turnos: um peteleco por vez, alternando ----------
+        this.turnoAtual = Phaser.Utils.Array.GetRandom(['jogador', 'ia']);
+        this.aguardandoParada = false;
+
+        const podeJogadorJogar = () =>
+            this.turnoAtual === 'jogador' && !this.aguardandoParada && this.corridaLiberada && !this.vencedor;
 
         this.input.on('dragstart', (pointer, gameObject) => {
-            if (this.vencedor || !this.corridaLiberada) return;
+            if (!podeJogadorJogar()) return;
             this.isDragging = true;
             this.dragStart = { x: gameObject.x, y: gameObject.y };
             this.linhaForca.setVisible(true);
         });
 
         this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
-            if (this.vencedor || !this.corridaLiberada) return;
+            if (!podeJogadorJogar()) return;
             const dx = dragX - this.dragStart.x;
             const dy = dragY - this.dragStart.y;
             const distancia = Phaser.Math.Distance.Between(0, 0, dx, dy);
@@ -636,7 +695,7 @@ function criarTexturaMadeira(scene) {
         });
 
         this.input.on('dragend', (pointer, gameObject) => {
-            if (this.vencedor || !this.corridaLiberada) return;
+            if (!podeJogadorJogar()) return;
             this.isDragging = false;
             this.linhaForca.setVisible(false);
 
@@ -661,13 +720,15 @@ function criarTexturaMadeira(scene) {
 
             gameObject.x = this.dragStart.x;
             gameObject.y = this.dragStart.y;
+
+            this.aguardandoParada = true;
         });
 
         this.linhaForca = this.add.line(0, 0, 0, 0, 0, 0, 0xffff00);
         this.linhaForca.setLineWidth(3);
         this.linhaForca.setVisible(false);
 
-        this.textoVencedor = this.add.text(400, 80, '', {
+        this.textoVencedor = this.add.text(400, 60, '', {
             fontSize: '32px',
             fontFamily: 'Arial',
             color: '#ffff00',
@@ -675,14 +736,23 @@ function criarTexturaMadeira(scene) {
             padding: { x: 10, y: 6 }
         }).setOrigin(0.5).setVisible(false);
 
-        this.textoContagem = this.add.text(400, 300, '', {
+        this.textoTurno = this.add.text(400, 30, '', {
+            fontSize: '20px',
+            fontFamily: FONTE_TITULO || 'Arial',
+            fontStyle: '600',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setVisible(false);
+
+        this.textoContagem = this.add.text(400, 330, '', {
             fontSize: '80px',
             fontFamily: 'Arial',
             color: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
-        this.botaoReiniciar = this.add.text(400, 550, '🔄 Reiniciar', {
+        this.botaoReiniciar = this.add.text(400, 570, '🔄 Reiniciar', {
             fontSize: '24px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -694,7 +764,7 @@ function criarTexturaMadeira(scene) {
             this.scene.restart();
         });
 
-        this.botaoMenu = this.add.text(600, 550, '🏠 Menu', {
+        this.botaoMenu = this.add.text(600, 570, '🏠 Menu', {
             fontSize: '24px',
             fontFamily: 'Arial',
             color: '#ffffff',
@@ -707,9 +777,17 @@ function criarTexturaMadeira(scene) {
         });
 
         this.iniciarContagem();
-        this.iaJogar();
     }
-    
+
+    atualizarInteratividadeJogador() {
+        const podeJogar = this.turnoAtual === 'jogador' && this.corridaLiberada && !this.vencedor;
+        if (podeJogar) {
+            this.jogador.setInteractive(); // reaproveita a hit area circular já configurada
+            this.input.setDraggable(this.jogador);
+        } else {
+            this.jogador.disableInteractive();
+        }
+    }
 
     iniciarContagem() {
         const passos = ['3', '2', '1', 'Vai!'];
@@ -728,35 +806,60 @@ function criarTexturaMadeira(scene) {
                 if (i === passos.length - 1) {
                     this.corridaLiberada = true;
                     this.time.delayedCall(600, () => this.textoContagem.setText(''));
+                    this.atualizarTextoTurno();
+                    this.atualizarInteratividadeJogador();
+
+                    if (this.turnoAtual === 'ia') {
+                        this.time.delayedCall(Phaser.Math.Between(500, 900), () => this.iaFazerJogada());
+                    }
                 }
             }
         });
     }
 
-    iaJogar() {
-        const agendarProximoPeteleco = () => {
-            const espera = Phaser.Math.Between(800, 1800);
+    atualizarTextoTurno() {
+        if (this.vencedor) { this.textoTurno.setVisible(false); return; }
+        this.textoTurno.setText(this.turnoAtual === 'jogador' ? '🎯 Sua vez!' : '⏳ Vez do adversário...');
+        this.textoTurno.setVisible(true);
+    }
 
-            this.time.delayedCall(espera, () => {
-                if (this.vencedor) return;
+    // um peteleco só, mirando aproximadamente na direção de avanço da pista (tangente ao anel)
+    iaFazerJogada() {
+        if (this.vencedor) return;
 
-                if (this.corridaLiberada) {
-                    const forca = Phaser.Math.Between(300, 550);
-                    const anguloVariacao = Phaser.Math.FloatBetween(-0.2, 0.2);
+        const anguloAtual = Math.atan2(this.ia.y - this.pista.centro.y, this.ia.x - this.pista.centro.x);
+        const sentido = -1; // sentido horário ao redor do anel
+        const anguloTangente = anguloAtual + (Math.PI / 2) * sentido + Phaser.Math.FloatBetween(-0.3, 0.3);
+        const forca = Phaser.Math.Between(320, 560);
 
-                    this.ia.body.setVelocity(
-                        Math.cos(anguloVariacao) * forca,
-                        Math.sin(anguloVariacao) * forca
-                    );
+        this.ia.body.setVelocity(
+            Math.cos(anguloTangente) * forca,
+            Math.sin(anguloTangente) * forca
+        );
 
-                    SomFX.peteleco();
-                }
+        SomFX.peteleco();
+        this.aguardandoParada = true;
+    }
 
-                agendarProximoPeteleco();
-            });
-        };
+    // detecta quando as tampinhas pararam de se mover pra liberar o próximo turno
+    verificarFimDeTurno() {
+        if (!this.aguardandoParada || this.vencedor) return;
 
-        agendarProximoPeteleco();
+        const todasPararam = this.tampinhas.every(t => {
+            const v = Phaser.Math.Distance.Between(0, 0, t.body.velocity.x, t.body.velocity.y);
+            return v < this.VELOCIDADE_MINIMA_PARADA;
+        });
+        if (!todasPararam) return;
+
+        this.tampinhas.forEach(t => t.body.setVelocity(0, 0));
+        this.aguardandoParada = false;
+        this.turnoAtual = (this.turnoAtual === 'jogador') ? 'ia' : 'jogador';
+        this.atualizarTextoTurno();
+        this.atualizarInteratividadeJogador();
+
+        if (this.turnoAtual === 'ia') {
+            this.time.delayedCall(Phaser.Math.Between(500, 900), () => this.iaFazerJogada());
+        }
     }
 
     update() {
@@ -778,10 +881,22 @@ function criarTexturaMadeira(scene) {
 
         if (this.vencedor) return;
 
+        this.verificarFimDeTurno();
+
+        // progresso na volta: acumula o ângulo percorrido ao redor do centro da pista.
+        // uma volta completa (2π líquidos) = vitória. Vai e vem se cancela — só conta avanço de verdade.
         this.tampinhas.forEach(t => {
-            if (t.x >= this.xChegada) {
+            const anguloAtual = Math.atan2(t.y - this.pista.centro.y, t.x - this.pista.centro.x);
+            let delta = anguloAtual - t.anguloAnterior;
+            if (delta > Math.PI) delta -= Math.PI * 2;
+            if (delta < -Math.PI) delta += Math.PI * 2;
+            t.voltaAcumulada += delta;
+            t.anguloAnterior = anguloAtual;
+
+            if (Math.abs(t.voltaAcumulada) >= Math.PI * 2 && !this.vencedor) {
                 this.vencedor = t.nome;
                 this.tampinhaVencedora = t;
+                this.atualizarInteratividadeJogador();
             }
         });
 
@@ -804,6 +919,7 @@ function criarTexturaMadeira(scene) {
             );
             explosao.explode(30);
 
+            this.textoTurno.setVisible(false);
             this.textoVencedor.setText('🏆 ' + this.vencedor + ' venceu!');
             this.textoVencedor.setVisible(true);
             this.botaoReiniciar.setVisible(true);
