@@ -3,6 +3,8 @@ const JogoState = {
     corJogador: 0xe74c3c,       // cor da marca padrão (Cola Max)
     marcaJogador: 'Cola Max'    // nome da marca padrão, na primeira vez
 };
+
+// ---------- Gerador de sons sintetizados ----------
 const SomFX = {
     ctx: null,
 
@@ -15,7 +17,6 @@ const SomFX = {
         }
     },
 
-    // cria um buffer de ruído branco (base pra sons percussivos/metálicos)
     criarRuido(duracao) {
         const tamanho = this.ctx.sampleRate * duracao;
         const buffer = this.ctx.createBuffer(1, tamanho, this.ctx.sampleRate);
@@ -26,12 +27,10 @@ const SomFX = {
         return buffer;
     },
 
-    // peteleco: "flick" seco - ruído agudo bem curto + um leve "toc" de corpo
     peteleco() {
         this.iniciar();
         const t = this.ctx.currentTime;
 
-        // camada 1: estalo agudo (o "flick" do dedo)
         const ruido = this.ctx.createBufferSource();
         ruido.buffer = this.criarRuido(0.05);
 
@@ -47,7 +46,6 @@ const SomFX = {
         ruido.start(t);
         ruido.stop(t + 0.05);
 
-        // camada 2: corpo curto e seco (o "toc" da tampinha saindo)
         const osc = this.ctx.createOscillator();
         const gainOsc = this.ctx.createGain();
 
@@ -63,12 +61,10 @@ const SomFX = {
         osc.stop(t + 0.07);
     },
 
-    // colisão: "clink" metálico de tampinha batendo em tampinha
     colisao() {
         this.iniciar();
         const t = this.ctx.currentTime;
 
-        // camada 1: impacto de ruído filtrado em banda estreita (dá o "corpo" metálico)
         const ruido = this.ctx.createBufferSource();
         ruido.buffer = this.criarRuido(0.15);
 
@@ -85,7 +81,6 @@ const SomFX = {
         ruido.start(t);
         ruido.stop(t + 0.15);
 
-        // camada 2: dois "pings" metálicos com frequências próximas (batimento = som de metal)
         [1800, 2650].forEach((freq, i) => {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
@@ -103,7 +98,6 @@ const SomFX = {
         });
     },
 
-    // fanfarra ascendente - vitória
     vitoria() {
         this.iniciar();
         const notas = [523.25, 659.25, 783.99, 1046.5];
@@ -126,8 +120,7 @@ const SomFX = {
             osc.stop(t + 0.4);
         });
     }
-
-    }
+};
 
 // ---------- Marcas fictícias disponíveis (fonte única, usada por todas as scenes) ----------
 const MARCAS_DISPONIVEIS = [
@@ -235,19 +228,17 @@ function desenharIcone(g, tipo, cx, cy, tam, corHex) {
     }
 }
 
-// gera (uma vez só, cacheada) uma textura de tampinha com borda serrilhada + logo
 function criarTexturaTampinha(scene, marca) {
     const chave = 'tampinha_' + marca.nome.replace(/\s+/g, '_');
     if (scene.textures.exists(chave)) return chave;
 
-    const tamanho = 100;
-    const raio = 45;
+    const tamanho = 76;
+    const raio = 33;
     const centro = tamanho / 2;
     const g = scene.add.graphics();
 
-    // borda serrilhada (efeito de tampinha de garrafa)
     const dentes = 16;
-    g.fillStyle(0x000000, 0.35);
+    g.fillStyle(0xb8b8b8, 0.6);
     g.beginPath();
     for (let i = 0; i < dentes * 2; i++) {
         const angulo = (Math.PI * 2 / (dentes * 2)) * i;
@@ -259,21 +250,187 @@ function criarTexturaTampinha(scene, marca) {
     g.closePath();
     g.fillPath();
 
-    // corpo colorido
     g.fillStyle(marca.cor, 1);
     g.fillCircle(centro, centro, raio - 7);
 
-    // brilho superior (efeito 3D leve)
     g.fillStyle(0xffffff, 0.25);
     g.fillEllipse(centro - 12, centro - 14, 26, 14);
 
-    // ícone/logo no centro
     desenharIcone(g, marca.icone, centro, centro + 6, 16, marca.corTexto);
 
     g.generateTexture(chave, tamanho, tamanho);
     g.destroy();
 
     return chave;
+}
+
+function criarTexturaParticula(scene, chave, cor) {
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(cor, 1);
+    g.fillCircle(8, 8, 8);
+    g.generateTexture(chave, 16, 16);
+    g.destroy();
+
+    return chave;
+}
+// ---------- Tema "quintal": cimento, giz e decoração ----------
+function criarTexturaCimento(scene) {
+    const chave = 'fundo_cimento';
+    if (scene.textures.exists(chave)) return chave;
+
+    const w = 800, h = 600;
+    const g = scene.add.graphics();
+
+    g.fillStyle(0xb5b0a6, 1);
+    g.fillRect(0, 0, w, h);
+
+    // granulado do cimento
+    for (let i = 0; i < 500; i++) {
+        const x = Math.random() * w;
+        const y = Math.random() * h;
+        const tom = Phaser.Math.Between(-14, 14);
+        const base = 181 + tom;
+        const cor = Phaser.Display.Color.GetColor(base, base - 5, base - 12);
+        g.fillStyle(cor, 0.4);
+        g.fillRect(x, y, 2, 2);
+    }
+
+    // rachaduras
+    g.lineStyle(2, 0x8f8a7d, 0.5);
+    for (let c = 0; c < 5; c++) {
+        let x = Math.random() * w;
+        let y = Math.random() * h;
+        g.beginPath();
+        g.moveTo(x, y);
+        const segmentos = Phaser.Math.Between(4, 7);
+        for (let s = 0; s < segmentos; s++) {
+            x += Phaser.Math.Between(-30, 30);
+            y += Phaser.Math.Between(-30, 30);
+            g.lineTo(x, y);
+        }
+        g.strokePath();
+    }
+
+    g.generateTexture(chave, w, h);
+    g.destroy();
+    return chave;
+}
+
+function criarTexturaFolha(scene) {
+    const chave = 'decor_folha';
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(0xc97a2b, 1);
+    g.fillEllipse(10, 10, 16, 10);
+    g.lineStyle(1, 0x8b4513, 0.8);
+    g.lineBetween(3, 10, 17, 10);
+    g.generateTexture(chave, 20, 20);
+    g.destroy();
+    return chave;
+}
+
+function criarTexturaPedra(scene) {
+    const chave = 'decor_pedra';
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(0x7a7a7a, 1);
+    g.fillCircle(8, 8, 7);
+    g.fillStyle(0x9a9a9a, 0.6);
+    g.fillCircle(6, 6, 3);
+    g.generateTexture(chave, 16, 16);
+    g.destroy();
+    return chave;
+}
+function criarTexturaMadeira(scene) {
+    const chave = 'fundo_madeira';
+    if (scene.textures.exists(chave)) return chave;
+
+    const w = 800, h = 600;
+    const g = scene.add.graphics();
+
+    g.fillStyle(0x8b5a2b, 1);
+    g.fillRect(0, 0, w, h);
+
+    // veios da madeira (linhas onduladas)
+    for (let i = 0; i < 40; i++) {
+        const y = Math.random() * h;
+        const tom = Phaser.Math.Between(-20, 20);
+        const base = 90 + tom;
+        const cor = Phaser.Display.Color.GetColor(base + 50, base + 20, base - 10);
+        g.lineStyle(Phaser.Math.Between(1, 2), cor, 0.25);
+        g.beginPath();
+        g.moveTo(0, y);
+        for (let x = 0; x <= w; x += 40) {
+            g.lineTo(x, y + Math.sin(x / 60 + i) * 6);
+        }
+        g.strokePath();
+    }
+
+    // emendas de tábuas (linhas verticais mais escuras)
+    g.lineStyle(2, 0x5b3a1f, 0.4);
+    for (let x = 160; x < w; x += 160) {
+        g.lineBetween(x, 0, x, h);
+    }
+
+    g.generateTexture(chave, w, h);
+    g.destroy();
+    return chave;
+}
+
+// desenha a pista como se fosse riscada de giz (borda levemente irregular)
+function desenharPistaGiz(scene, pista) {
+    const g = scene.add.graphics();
+    g.lineStyle(4, 0xffffff, 0.85);
+
+    const pontos = [
+        { x: pista.x, y: pista.y },
+        { x: pista.x + pista.largura, y: pista.y },
+        { x: pista.x + pista.largura, y: pista.y + pista.altura },
+        { x: pista.x, y: pista.y + pista.altura },
+        { x: pista.x, y: pista.y }
+    ];
+
+    g.beginPath();
+    g.moveTo(pontos[0].x, pontos[0].y);
+    for (let i = 1; i < pontos.length; i++) {
+        const p0 = pontos[i - 1];
+        const p1 = pontos[i];
+        const passos = 6;
+        for (let s = 1; s <= passos; s++) {
+            const t = s / passos;
+            const x = Phaser.Math.Linear(p0.x, p1.x, t) + Phaser.Math.Between(-2, 2);
+            const y = Phaser.Math.Linear(p0.y, p1.y, t) + Phaser.Math.Between(-2, 2);
+            g.lineTo(x, y);
+        }
+    }
+    g.strokePath();
+
+    g.fillStyle(0xffffff, 0.05);
+    g.fillRect(pista.x, pista.y, pista.largura, pista.altura);
+}
+
+// espalha folhas e pedrinhas nas margens ao redor da pista
+function espalharDecoracao(scene) {
+    const decorTipos = [criarTexturaFolha(scene), criarTexturaPedra(scene)];
+
+    for (let i = 0; i < 10; i++) {
+        const zona = Phaser.Math.Between(0, 3);
+        let x, y;
+
+        if (zona === 0) { x = Phaser.Math.Between(10, 790); y = Phaser.Math.Between(10, 75); }
+        else if (zona === 1) { x = Phaser.Math.Between(10, 790); y = Phaser.Math.Between(515, 590); }
+        else if (zona === 2) { x = Phaser.Math.Between(5, 32); y = Phaser.Math.Between(95, 505); }
+        else { x = Phaser.Math.Between(768, 795); y = Phaser.Math.Between(95, 505); }
+
+        const tipo = Phaser.Utils.Array.GetRandom(decorTipos);
+        scene.add.image(x, y, tipo)
+            .setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2))
+            .setAlpha(0.85);
+    }
 }
 class CorridaScene extends Phaser.Scene {
     constructor() {
@@ -297,36 +454,50 @@ class CorridaScene extends Phaser.Scene {
         this.FORCA_MAXIMA = 600;
         this.DISTANCIA_MAXIMA = 120;
 
-        // lista de marcas fictícias disponíveis (mesma da tela de seleção)
-const MARCAS_DISPONIVEIS = [
-    { nome: 'Cola Max',    cor: 0xe74c3c },
-    { nome: 'Refri Pop',   cor: 0x3498db },
-    { nome: 'Cerva Gold',  cor: 0xf1c40f },
-    { nome: 'Turbo Cola',  cor: 0x2c3e50 },
-    { nome: 'Ice Beer',    cor: 0x1abc9c },
-    { nome: 'Limão Fresh', cor: 0x2ecc71 },
-    { nome: 'Roxo Bomba',  cor: 0x9b59b6 },
-    { nome: 'Laranjito',   cor: 0xe67e22 }
-];
+        const marcasParaIA = MARCAS_DISPONIVEIS.filter(m => m.nome !== JogoState.marcaJogador);
+        const marcaIA = Phaser.Utils.Array.GetRandom(marcasParaIA);
+        const marcaJogador = MARCAS_DISPONIVEIS.find(m => m.nome === JogoState.marcaJogador) || MARCAS_DISPONIVEIS[0];
 
-// sorteia uma marca pra IA, diferente da marca escolhida pelo jogador
-const marcasParaIA = MARCAS_DISPONIVEIS.filter(m => m.nome !== JogoState.marcaJogador);
-const marcaIA = Phaser.Utils.Array.GetRandom(marcasParaIA);
+        const MARCAS_CORRIDA = [marcaJogador, marcaIA];
 
-const CORES = [JogoState.corJogador, marcaIA.cor];
-const NOMES = [JogoState.marcaJogador, marcaIA.nome];
+     this.add.image(400, 300, criarTexturaCimento(this));
+        espalharDecoracao(this);
+        desenharPistaGiz(this, this.PISTA);
+function criarTexturaMadeira(scene) {
+    const chave = 'fundo_madeira';
+    if (scene.textures.exists(chave)) return chave;
 
-        this.add.rectangle(400, 300, 800, 600, 0x999999);
+    const w = 800, h = 600;
+    const g = scene.add.graphics();
 
-        this.add.rectangle(
-            this.PISTA.x + this.PISTA.largura / 2,
-            this.PISTA.y + this.PISTA.altura / 2,
-            this.PISTA.largura,
-            this.PISTA.altura,
-            0xffffff,
-            0.2
-        );
+    g.fillStyle(0x8b5a2b, 1);
+    g.fillRect(0, 0, w, h);
 
+    // veios da madeira (linhas onduladas)
+    for (let i = 0; i < 40; i++) {
+        const y = Math.random() * h;
+        const tom = Phaser.Math.Between(-20, 20);
+        const base = 90 + tom;
+        const cor = Phaser.Display.Color.GetColor(base + 50, base + 20, base - 10);
+        g.lineStyle(Phaser.Math.Between(1, 2), cor, 0.25);
+        g.beginPath();
+        g.moveTo(0, y);
+        for (let x = 0; x <= w; x += 40) {
+            g.lineTo(x, y + Math.sin(x / 60 + i) * 6);
+        }
+        g.strokePath();
+    }
+
+    // emendas de tábuas (linhas verticais mais escuras)
+    g.lineStyle(2, 0x5b3a1f, 0.4);
+    for (let x = 160; x < w; x += 160) {
+        g.lineBetween(x, 0, x, h);
+    }
+
+    g.generateTexture(chave, w, h);
+    g.destroy();
+    return chave;
+}
         const paredes = this.physics.add.staticGroup();
         const espessura = 10;
         paredes.add(this.add.rectangle(this.PISTA.x + this.PISTA.largura / 2, this.PISTA.y, this.PISTA.largura, espessura, 0xffffff, 0).setOrigin(0.5));
@@ -342,22 +513,23 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
 
         const posY = [this.PISTA.y + 100, this.PISTA.y + 200];
 
-        // ---------- criação das tampinhas com sombra ----------
         for (let i = 0; i < 2; i++) {
-            // sombra: um círculo cinza escuro, um pouco deslocado, atrás da tampinha
+            const marca = MARCAS_CORRIDA[i];
+
             const sombra = this.add.circle(this.PISTA.x + 50 + 4, posY[i] + 6, 30, 0x000000, 0.25);
 
-            const t = this.add.circle(this.PISTA.x + 50, posY[i], 30, CORES[i]);
+            const chave = criarTexturaTampinha(this, marca);
+            const t = this.add.image(this.PISTA.x + 50, posY[i], chave);
             this.physics.add.existing(t);
-            t.body.setCircle(30);
+            t.body.setCircle(30, 8, 8);
             t.body.setDamping(true);
             t.body.setDrag(0.98);
             t.body.setBounce(0.6);
-            t.nome = NOMES[i];
+            t.nome = marca.nome;
+            t.corBase = marca.cor;
             t.sombra = sombra;
 
-            // rastro: emissor de partículas sutil, sempre criado mas emitindo só em alta velocidade
-            t.rastro = this.add.particles(0, 0, criarTexturaParticula(this, 'particulaRastro', CORES[i]), {
+            t.rastro = this.add.particles(0, 0, criarTexturaParticula(this, 'particulaRastro_' + marca.nome.replace(/\s+/g, '_'), marca.cor), {
                 lifespan: 250,
                 speed: { min: 0, max: 20 },
                 scale: { start: 0.5, end: 0 },
@@ -366,7 +538,7 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
                 frequency: 40,
                 follow: t
             });
-            t.rastro.stop(); // liga/desliga conforme velocidade no update
+            t.rastro.stop();
 
             this.tampinhas.push(t);
         }
@@ -375,7 +547,7 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
         this.ia = this.tampinhas[1];
 
         this.jogador.setInteractive(
-            new Phaser.Geom.Circle(30, 30, 30),
+            new Phaser.Geom.Circle(38, 38, 33),
             Phaser.Geom.Circle.Contains
         );
         this.input.setDraggable(this.jogador);
@@ -485,6 +657,7 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
         this.iniciarContagem();
         this.iaJogar();
     }
+    
 
     iniciarContagem() {
         const passos = ['3', '2', '1', 'Vai!'];
@@ -535,15 +708,12 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
     }
 
     update() {
-        // ---------- atualiza sombra e rastro de cada tampinha ----------
         this.tampinhas.forEach(t => {
-            // sombra segue a tampinha com leve deslocamento
             if (t.sombra) {
                 t.sombra.x = t.x + 4;
                 t.sombra.y = t.y + 6;
             }
 
-            // rastro liga/desliga conforme velocidade
             if (t.body && t.rastro) {
                 const velocidade = Phaser.Math.Distance.Between(0, 0, t.body.velocity.x, t.body.velocity.y);
                 if (velocidade > 60) {
@@ -566,8 +736,7 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
         if (this.vencedor) {
             SomFX.vitoria();
 
-            // explosão de partículas na cor da tampinha vencedora
-            const corVencedor = this.tampinhaVencedora.fillColor;
+            const corVencedor = this.tampinhaVencedora.corBase;
             const explosao = this.add.particles(
                 this.tampinhaVencedora.x,
                 this.tampinhaVencedora.y,
@@ -583,7 +752,7 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
             );
             explosao.explode(30);
 
-            this.textoVencedor.setText('🏆 Tampinha ' + this.vencedor + ' venceu!');
+            this.textoVencedor.setText('🏆 ' + this.vencedor + ' venceu!');
             this.textoVencedor.setVisible(true);
             this.botaoReiniciar.setVisible(true);
             this.botaoMenu.setVisible(true);
@@ -593,19 +762,6 @@ const NOMES = [JogoState.marcaJogador, marcaIA.nome];
             });
         }
     }
-}
-
-// ---------- utilitário: cria uma textura circular simples pra usar em partículas ----------
-function criarTexturaParticula(scene, chave, cor) {
-    if (scene.textures.exists(chave)) return chave;
-
-    const g = scene.add.graphics();
-    g.fillStyle(cor, 1);
-    g.fillCircle(8, 8, 8);
-    g.generateTexture(chave, 16, 16);
-    g.destroy();
-
-    return chave;
 }
 
 const config = {

@@ -1,18 +1,18 @@
-body {
+html, body {
     margin: 0;
     padding: 0;
+    width: 100%;
+    height: 100%;
     background: #222;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    height: 100dvh; /* melhor suporte em celulares modernos */
     overflow: hidden;
 }
 
 #game {
-    width: 100%;
-    height: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 14%;
+    bottom: 0;
     display: flex;
     justify-content: center;
     align-items: center;

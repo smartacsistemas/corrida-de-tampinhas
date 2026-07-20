@@ -4,34 +4,35 @@ class MenuScene extends Phaser.Scene {
     }
 
     create() {
-    // tenta forçar landscape (só funciona em alguns navegadores Android, em fullscreen)
-    if (screen.orientation && screen.orientation.lock) {
-        document.documentElement.requestFullscreen?.().then(() => {
-            screen.orientation.lock('landscape').catch(() => {});
-        }).catch(() => {});
-    }
-
-    
-        // fundo
-        this.add.rectangle(400, 300, 800, 600, 0x1a1a1a);
+        // fundo tema quintal
+        this.add.image(400, 300, criarTexturaCimento(this));
+        this.add.rectangle(400, 300, 800, 600, 0x000000, 0.35);
+        espalharDecoracao(this);
 
         // título
         this.add.text(400, 150, 'CORRIDA DE', {
             fontSize: '40px',
             fontFamily: 'Arial',
             color: '#ffffff',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 5
         }).setOrigin(0.5);
 
         this.add.text(400, 200, 'TAMPINHAS', {
             fontSize: '48px',
             fontFamily: 'Arial',
             color: '#ffff00',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 5
         }).setOrigin(0.5);
 
-        // tampinha decorativa (só visual, gira devagar)
-        const tampinhaDecor = this.add.circle(400, 320, 40, 0xff0000);
+        // tampinha decorativa: usa a marca já escolhida pelo jogador (ou a padrão)
+        const marcaAtual = MARCAS_DISPONIVEIS.find(m => m.nome === JogoState.marcaJogador) || MARCAS_DISPONIVEIS[0];
+        const chaveTampinha = criarTexturaTampinha(this, marcaAtual);
+        const tampinhaDecor = this.add.image(400, 320, chaveTampinha).setScale(1.3);
+
         this.tweens.add({
             targets: tampinhaDecor,
             angle: 360,
@@ -48,7 +49,6 @@ class MenuScene extends Phaser.Scene {
             padding: { x: 30, y: 14 }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-        // efeito de hover simples
         botaoJogar.on('pointerover', () => botaoJogar.setStyle({ backgroundColor: '#27ae60' }));
         botaoJogar.on('pointerout', () => botaoJogar.setStyle({ backgroundColor: '#2ecc71' }));
 
@@ -60,7 +60,7 @@ class MenuScene extends Phaser.Scene {
         this.add.text(400, 550, 'Projeto Giz — protótipo', {
             fontSize: '14px',
             fontFamily: 'Arial',
-            color: '#888888'
+            color: '#cccccc'
         }).setOrigin(0.5);
     }
 }
