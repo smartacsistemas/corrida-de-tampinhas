@@ -313,6 +313,30 @@ function criarTexturaCimento(scene) {
         g.strokePath();
     }
 
+    // manchas suaves (umidade, sujeira antiga) — poucas e bem sutis
+    for (let m = 0; m < 6; m++) {
+        const x = Math.random() * w;
+        const y = Math.random() * h;
+        const raio = Phaser.Math.Between(18, 45);
+        g.fillStyle(0x8a8378, Phaser.Math.FloatBetween(0.04, 0.09));
+        g.fillEllipse(x, y, raio * 1.6, raio);
+    }
+
+    // vestígio de giz apagado — um risco antigo de uma brincadeira anterior
+    g.lineStyle(3, 0xffffff, 0.06);
+    for (let gz = 0; gz < 2; gz++) {
+        let x = Math.random() * w;
+        let y = Math.random() * h;
+        g.beginPath();
+        g.moveTo(x, y);
+        for (let s = 0; s < 5; s++) {
+            x += Phaser.Math.Between(-40, 40);
+            y += Phaser.Math.Between(-15, 15);
+            g.lineTo(x, y);
+        }
+        g.strokePath();
+    }
+
     g.generateTexture(chave, w, h);
     g.destroy();
     return chave;
@@ -783,4 +807,19 @@ const config = {
     scene: [MenuScene, SelecaoScene, CorridaScene]
 };
 
-const game = new Phaser.Game(config);
+function iniciarJogo() {
+    window.game = new Phaser.Game(config);
+}
+
+// garante que a fonte "Fredoka" já esteja pronta antes do Phaser desenhar o primeiro texto
+if (document.fonts && document.fonts.load) {
+    Promise.race([
+        Promise.all([
+            document.fonts.load('600 40px Fredoka'),
+            document.fonts.load('700 48px Fredoka')
+        ]),
+        new Promise(resolve => setTimeout(resolve, 500)) // trava de segurança
+    ]).then(iniciarJogo);
+} else {
+    iniciarJogo();
+}
