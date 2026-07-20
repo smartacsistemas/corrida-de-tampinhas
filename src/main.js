@@ -196,21 +196,35 @@ const SomFX = {
 // pra soar mais como um chocalho/caixinha de música do que uma trilha "de jogo".
 const MusicaFundo = {
     tocando: false,
-    proximoTimer: null,
-    notas: [261.63, 293.66, 329.63, 392.00, 440.00, 523.25], // escala pentatônica (dó ré mi sol lá dó)
+    timer: null,
+    passo: 0,
 
-    tocarNota(freq, duracao, volume) {
+    // frase curta e fixa, em vez de notas soltas ao acaso — assim ela tem começo, meio e fim,
+    // com respiros (pausas) entre as frases. Se repete, mas de um jeito mais "cantiga de ninar"
+    // e menos "máquina sorteando nota".
+    frase: [
+        { freq: 329.63, dur: 0.55 }, // mi
+        { freq: 392.00, dur: 0.55 }, // sol
+        { freq: 440.00, dur: 0.85 }, // lá
+        { freq: null,   dur: 0.35 }, // respiro
+        { freq: 392.00, dur: 0.55 }, // sol
+        { freq: 329.63, dur: 0.55 }, // mi
+        { freq: 293.66, dur: 1.0 },  // ré
+        { freq: null,   dur: 1.6 }   // respiro maior antes de repetir a frase
+    ],
+
+    tocarNota(freq, duracao) {
         SomFX.iniciar();
         const t = SomFX.ctx.currentTime;
 
         const osc = SomFX.ctx.createOscillator();
         const gain = SomFX.ctx.createGain();
 
-        osc.type = 'triangle';
+        osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, t);
 
         gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.linearRampToValueAtTime(volume, t + 0.06);
+        gain.gain.linearRampToValueAtTime(0.045, t + 0.09);
         gain.gain.exponentialRampToValueAtTime(0.0001, t + duracao);
 
         osc.connect(gain).connect(SomFX.ctx.destination);
@@ -218,28 +232,28 @@ const MusicaFundo = {
         osc.stop(t + duracao + 0.05);
     },
 
-    agendarProximaNota() {
+    tocarPasso() {
         if (!this.tocando) return;
 
-        const freq = Phaser.Utils.Array.GetRandom(this.notas);
-        const duracao = Phaser.Math.FloatBetween(0.7, 1.3);
-        this.tocarNota(freq, duracao, 0.045);
+        const passo = this.frase[this.passo % this.frase.length];
+        if (passo.freq) this.tocarNota(passo.freq, passo.dur);
 
-        const espera = Phaser.Math.Between(600, 1000);
-        this.proximoTimer = setTimeout(() => this.agendarProximaNota(), espera);
+        this.passo++;
+        this.timer = setTimeout(() => this.tocarPasso(), passo.dur * 1000);
     },
 
     iniciar() {
         if (this.tocando) return;
         this.tocando = true;
-        this.agendarProximaNota();
+        this.passo = 0;
+        this.timer = setTimeout(() => this.tocarPasso(), 400);
     },
 
     parar() {
         this.tocando = false;
-        if (this.proximoTimer) {
-            clearTimeout(this.proximoTimer);
-            this.proximoTimer = null;
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
         }
     }
 };
