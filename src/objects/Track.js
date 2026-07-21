@@ -1,7 +1,13 @@
-// ---------- Pista grande: geometria, colisão e zonas especiais ----------
+// ---------- Pista grande: geometria e zonas especiais ----------
 // A pista é um anel entre uma borda externa e uma "ilha" central, com raio variável
 // por ângulo (várias harmônicas de seno) — isso cria muitas curvas, retas e "esses",
 // como uma pista de giz bem comprida desenhada de verdade num quintal grande.
+//
+// Importante: a pista NÃO tem paredes físicas. As linhas são só risco de giz — se a
+// tampinha passar da linha (por um peteleco forte ou por ter sido empurrada numa batida),
+// é falta: ela volta um pouquinho (RETROCESSO_DISTANCIA) pra trás de onde saiu, sem
+// nenhuma barreira sólida no caminho. Isso é o que permite tirar o adversário da pista
+// na porrada, em vez de ele simplesmente "bater numa parede" e ficar preso do lado de dentro.
 
 const MUNDO_LARGURA = 3000;
 const MUNDO_ALTURA = 2400;
@@ -55,6 +61,12 @@ function calcularStatusNaPista(pista, x, y) {
     const nInt = Math.sqrt((dx / rxi) ** 2 + (dy / ryi) ** 2);
 
     return { theta, nExt, nInt, dentro: nExt <= 1.03 && nInt >= 0.97 };
+}
+
+// raio "local" aproximado da pista num ângulo (usado só pra converter uma distância em
+// metros/pixels numa variação de ângulo equivalente — não precisa ser exato)
+function raioLocalPista(pista, angulo) {
+    return (pista.raioXExt(angulo) + pista.raioYExt(angulo)) / 2;
 }
 
 // desenha a pista riscada de giz: fundo tingido do anel + contornos irregulares + linha de chegada
@@ -127,27 +139,6 @@ function desenharPista(scene, pista) {
             padding: { x: 6, y: 3 }
         }).setOrigin(0.5).setAlpha(0.8);
     }
-}
-
-// cria as paredes físicas (invisíveis) que seguem o contorno externo e interno da pista
-function criarParedesPista(scene, pista) {
-    const paredes = scene.physics.add.staticGroup();
-
-    const criarParedeCurva = (raioXFn, raioYFn, quantidade, raioColisor) => {
-        for (let i = 0; i < quantidade; i++) {
-            const angulo = (Math.PI * 2 / quantidade) * i;
-            const p = pontoNaElipse(pista.centro.x, pista.centro.y, raioXFn(angulo), raioYFn(angulo), angulo);
-            const bloco = scene.add.circle(p.x, p.y, raioColisor, 0xffffff, 0);
-            scene.physics.add.existing(bloco, true);
-            bloco.body.setCircle(raioColisor);
-            paredes.add(bloco);
-        }
-    };
-
-    criarParedeCurva(pista.raioXExt, pista.raioYExt, 380, 24);
-    criarParedeCurva(pista.raioXInt, pista.raioYInt, 260, 20);
-
-    return paredes;
 }
 
 // desenha uma zona especial (poça d'água ou grama/areia) que atravessa a pista numa faixa angular

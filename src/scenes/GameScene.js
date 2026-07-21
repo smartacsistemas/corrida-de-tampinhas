@@ -23,7 +23,9 @@ class GameScene extends Phaser.Scene {
         this.FORCA_MAXIMA = 900;
         this.DISTANCIA_MAXIMA = 140;
         this.VELOCIDADE_MINIMA_PARADA = 5;
-        this.RETROCESSO_FORA_DA_PISTA = 0.3; // ~17°, "alguns metros" de volta quando sai da pista
+        // a pista não tem parede: passar da linha é falta, e a falta custa só um empurrãozinho
+        // de volta (não um tapa de 17° que nessa pista gigante vira uma volta enorme).
+        this.RETROCESSO_DISTANCIA = 70;
 
         // ---------- mundo grande + câmera acompanhando quem está jogando ----------
         this.physics.world.setBounds(0, 0, MUNDO_LARGURA, MUNDO_ALTURA);
@@ -35,8 +37,6 @@ class GameScene extends Phaser.Scene {
         decorarIlhaCentral(this, this.pista);
         desenharZonaAgua(this, this.pista, this.zonaAgua);
         desenharZonaAreia(this, this.pista, this.zonaAreia);
-
-        const paredes = criarParedesPista(this, this.pista);
 
         // ---------- grid de largada: 4 tampinhas, 2 filas x 2 colunas, no ângulo 180° ----------
         const anguloLargada = Math.PI;
@@ -76,12 +76,18 @@ class GameScene extends Phaser.Scene {
         this.input.setDraggable(this.jogador);
         this.atualizarInteratividadeJogador();
 
-        const grupoTampinhas = this.physics.add.group(this.tampinhas);
-        this.physics.add.collider(grupoTampinhas, grupoTampinhas, () => {
-            SomFX.colisao();
-            this.cameras.main.shake(120, 0.006);
-        });
-        this.physics.add.collider(grupoTampinhas, paredes, () => SomFX.colisao());
+        // ---------- colisão só entre as tampinhas — a pista em si não tem parede física ----------
+        // colliders par a par (não usa physics.add.group): o Group do Arcade reseta bounce/drag/
+        // damping de cada body pros padrões do Phaser ao agrupar, mesmo em bodies já configurados
+        // — o que deixava as batidas "mortas" (sem força nenhuma pra tirar o adversário da pista).
+        for (let i = 0; i < this.tampinhas.length; i++) {
+            for (let j = i + 1; j < this.tampinhas.length; j++) {
+                this.physics.add.collider(this.tampinhas[i], this.tampinhas[j], () => {
+                    SomFX.colisao();
+                    this.cameras.main.shake(120, 0.006);
+                });
+            }
+        }
 
         // ---------- câmera: corta na hora pro competidor da vez e acompanha suavemente ----------
         this.cameras.main.centerOn(this.jogador.x, this.jogador.y);
@@ -222,7 +228,7 @@ class GameScene extends Phaser.Scene {
         const box = { x: 640, y: 16, w: 144, h: 110 };
         this.minimapaEscala = { x: box.w / MUNDO_LARGURA, y: box.h / MUNDO_ALTURA, box };
 
-        const fundo = this.add.rectangle(box.x + box.w / 2, box.y + box.h / 2, box.w + 8, box.h + 8, 0x000000, 0.45)
+        this.add.rectangle(box.x + box.w / 2, box.y + box.h / 2, box.w + 8, box.h + 8, 0x000000, 0.45)
             .setScrollFactor(0).setDepth(999).setStrokeStyle(2, 0xffffff, 0.6);
 
         const contorno = this.add.graphics().setScrollFactor(0).setDepth(999);
@@ -356,14 +362,19 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    // a tampinha saiu da pista: toca o efeito, treme a câmera e a puxa de volta alguns "metros"
+    // a tampinha passou da linha: toca o efeito, treme a câmera e a puxa de volta só um
+    // pouquinho (RETROCESSO_DISTANCIA) — não existe parede, então uma batida forte pode
+    // mandar o adversário pra fora numa boa, e a "multa" por isso é pequena e fixa, não um
+    // arco gigante que dependeria do raio da pista naquele trecho.
     aplicarPenalidadeForaDaPista(t, status) {
         t.emPenalidade = true;
         SomFX.foraDaPista();
         this.cameras.main.shake(150, 0.008);
 
         const anguloDePartida = t.posicaoSegura ? t.posicaoSegura.angulo : status.theta;
-        const anguloRecuo = anguloDePartida - this.RETROCESSO_FORA_DA_PISTA;
+        const raioLocal = raioLocalPista(this.pista, anguloDePartida);
+        const deltaAngulo = this.RETROCESSO_DISTANCIA / raioLocal;
+        const anguloRecuo = anguloDePartida - deltaAngulo;
 
         const rMedioX = (this.pista.raioXExt(anguloRecuo) + this.pista.raioXInt(anguloRecuo)) / 2;
         const rMedioY = (this.pista.raioYExt(anguloRecuo) + this.pista.raioYInt(anguloRecuo)) / 2;
