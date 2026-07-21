@@ -23,9 +23,9 @@ class GameScene extends Phaser.Scene {
         this.FORCA_MAXIMA = 900;
         this.DISTANCIA_MAXIMA = 140;
         this.VELOCIDADE_MINIMA_PARADA = 5;
-        // a pista não tem parede: passar da linha é falta, e a falta custa só um empurrãozinho
-        // de volta (não um tapa de 17° que nessa pista gigante vira uma volta enorme).
-        this.RETROCESSO_DISTANCIA = 70;
+        // a pista não tem parede: passar da linha é falta, e a falta custa um empurrão de volta
+        // (não uma barreira sólida). Recuo grande de propósito, pra valer a pena jogar com cuidado.
+        this.RETROCESSO_DISTANCIA = 140;
 
         // ---------- mundo grande + câmera acompanhando quem está jogando ----------
         this.physics.world.setBounds(0, 0, MUNDO_LARGURA, MUNDO_ALTURA);
@@ -362,10 +362,12 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    // a tampinha passou da linha: toca o efeito, treme a câmera e a puxa de volta só um
-    // pouquinho (RETROCESSO_DISTANCIA) — não existe parede, então uma batida forte pode
-    // mandar o adversário pra fora numa boa, e a "multa" por isso é pequena e fixa, não um
-    // arco gigante que dependeria do raio da pista naquele trecho.
+    // a tampinha passou da linha: toca o efeito, treme a câmera e a puxa de volta (RETROCESSO_DISTANCIA)
+    // — não existe parede, então uma batida forte pode mandar o adversário pra fora numa boa, e a
+    // "multa" por isso é sempre PRA TRÁS de onde a tampinha estava indo, nunca pra frente: usa o
+    // sentido real do movimento (velocidade) no instante em que ela saiu, não um sinal fixo, porque
+    // uma pista com curvas tem trechos onde "recuar" significa ângulo crescente e trechos onde
+    // significa ângulo decrescente.
     aplicarPenalidadeForaDaPista(t, status) {
         t.emPenalidade = true;
         SomFX.foraDaPista();
@@ -373,8 +375,13 @@ class GameScene extends Phaser.Scene {
 
         const anguloDePartida = t.posicaoSegura ? t.posicaoSegura.angulo : status.theta;
         const raioLocal = raioLocalPista(this.pista, anguloDePartida);
+
+        const tangente = tangentePista(this.pista, anguloDePartida);
+        const produtoEscalar = t.body.velocity.x * tangente.x + t.body.velocity.y * tangente.y;
+        const sentidoMovimento = produtoEscalar >= 0 ? 1 : -1;
+
         const deltaAngulo = this.RETROCESSO_DISTANCIA / raioLocal;
-        const anguloRecuo = anguloDePartida - deltaAngulo;
+        const anguloRecuo = anguloDePartida - sentidoMovimento * deltaAngulo;
 
         const rMedioX = (this.pista.raioXExt(anguloRecuo) + this.pista.raioXInt(anguloRecuo)) / 2;
         const rMedioY = (this.pista.raioYExt(anguloRecuo) + this.pista.raioYInt(anguloRecuo)) / 2;

@@ -69,6 +69,15 @@ function raioLocalPista(pista, angulo) {
     return (pista.raioXExt(angulo) + pista.raioYExt(angulo)) / 2;
 }
 
+// vetor tangente (não normalizado) à pista num ângulo — usado pra saber se a tampinha
+// estava indo "no sentido horário" ou "anti-horário" no instante em que saiu da pista.
+function tangentePista(pista, angulo) {
+    return {
+        x: -Math.sin(angulo) * pista.raioXExt(angulo),
+        y: Math.cos(angulo) * pista.raioYExt(angulo)
+    };
+}
+
 // desenha a pista riscada de giz: fundo tingido do anel + contornos irregulares + linha de chegada
 function desenharPista(scene, pista) {
     const { centro } = pista;
