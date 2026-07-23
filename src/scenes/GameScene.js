@@ -236,8 +236,10 @@ class GameScene extends Phaser.Scene {
                 .setVisible(false);
             parede.setRotation(Phaser.Math.Angle.BetweenPoints(pontoA, pontoB));
             this.physics.add.existing(parede, true);
-            parede.body.setImmovable(true);
-            parede.body.setBounce(0.12);
+            // static bodies are immovable by default in Arcade Physics; avoid calling
+            // instance methods that may not exist on StaticBody in some Phaser builds.
+            // Bounce is controlled by the dynamic body's bounce property (tampinhas).
+            
             this.bordasPista.add(parede);
         };
 
