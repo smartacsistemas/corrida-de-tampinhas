@@ -150,10 +150,10 @@ function criarTampinha(scene, marca, pos, pista) {
     scene.physics.add.existing(t);
     t.body.setCircle(30, 8, 8);
     t.body.setDamping(true);
-    t.body.setDrag(0.98);
-    // bounce alto: uma batida bem mirada tem que conseguir jogar o adversário pra frente
-    // (ou até tirá-lo da pista), não só "esbarrar" nele.
-    t.body.setBounce(0.85);
+    // drag mais forte para reduzir o deslizamento excessivo após cada impulso.
+    t.body.setDrag(0.985, 0.985);
+    // elasticidade moderada: colisões continuam naturais sem "quicar" demais.
+    t.body.setBounce(0.35);
     t.body.setMass(1);
     t.body.setCollideWorldBounds(true);
 
