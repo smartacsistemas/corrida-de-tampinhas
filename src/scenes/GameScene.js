@@ -233,7 +233,11 @@ class GameScene extends Phaser.Scene {
         this.iniciarContagem();
     }
 
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 712c9fea49a67bf8cd7488e71e004471b7d25add
 
     // ---------- minimapa: contorno fixo da pista + um ponto por tampinha ----------
     criarMinimapa() {
@@ -398,6 +402,15 @@ class GameScene extends Phaser.Scene {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // a tampinha passou da linha: toca o efeito, treme a câmera e a puxa de volta (RETROCESSO_DISTANCIA)
+    // — não existe parede, então uma batida forte pode mandar o adversário pra fora numa boa, e a
+    // "multa" por isso é sempre PRA TRÁS de onde a tampinha estava indo, nunca pra frente: usa o
+    // sentido real do movimento (velocidade) no instante em que ela saiu, não um sinal fixo, porque
+    // uma pista com curvas tem trechos onde "recuar" significa ângulo crescente e trechos onde
+    // significa ângulo decrescente.
+>>>>>>> 712c9fea49a67bf8cd7488e71e004471b7d25add
     aplicarPenalidadeForaDaPista(t, status) {
         t.emPenalidade = true;
         SomFX.foraDaPista();
