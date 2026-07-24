@@ -93,6 +93,14 @@ function desenharIcone(g, tipo, cx, cy, tam, corHex) {
     }
 }
 
+const TAMPINHA_MATERIAL = {
+    bounce: 0.18,
+    drag: 0.992,
+    mass: 1,
+    friction: 0.04,
+    ccd: true // Arcade não tem CCD completo, mas usamos ajustes de colisão para reduzir "tunneling".
+};
+
 function criarTexturaTampinha(scene, marca) {
     const chave = 'tampinha_' + marca.nome.replace(/\s+/g, '_');
     if (scene.textures.exists(chave)) return chave;
@@ -150,11 +158,10 @@ function criarTampinha(scene, marca, pos, pista) {
     scene.physics.add.existing(t);
     t.body.setCircle(30, 8, 8);
     t.body.setDamping(true);
-    t.body.setDrag(0.98);
-    // bounce alto: uma batida bem mirada tem que conseguir jogar o adversário pra frente
-    // (ou até tirá-lo da pista), não só "esbarrar" nele.
-    t.body.setBounce(0.85);
-    t.body.setMass(1);
+    // material de física da tampinha: pouco atrito dinâmico e leve quique.
+    t.body.setDrag(TAMPINHA_MATERIAL.drag, TAMPINHA_MATERIAL.drag);
+    t.body.setBounce(TAMPINHA_MATERIAL.bounce);
+    t.body.setMass(TAMPINHA_MATERIAL.mass);
     t.body.setCollideWorldBounds(true);
 
     t.nome = marca.nome;
