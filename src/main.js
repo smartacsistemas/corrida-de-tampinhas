@@ -302,6 +302,36 @@ function criarTexturaPedra(scene) {
     g.destroy();
     return chave;
 }
+
+function criarTexturaGizApagado(scene) {
+    const chave = 'decor_giz_apagado';
+    if (scene.textures.exists(chave)) return chave;
+
+    const g = scene.add.graphics();
+    g.fillStyle(0xffffff, 0.16);
+    g.fillRoundedRect(0, 0, 18, 4, 2);
+    g.generateTexture(chave, 18, 4);
+    g.destroy();
+    return chave;
+}
+
+function espalharGizApagado(scene, pista) {
+    const chave = criarTexturaGizApagado(scene);
+    for (let i = 0; i < 22; i++) {
+        const angulo = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const margem = Phaser.Math.Between(80, 150);
+        const p = pontoNaElipse(
+            pista.centro.x, pista.centro.y,
+            pista.raioXExt(angulo) + margem, pista.raioYExt(angulo) + margem,
+            angulo
+        );
+        scene.add.image(p.x, p.y, chave)
+            .setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2))
+            .setAlpha(Phaser.Math.FloatBetween(0.2, 0.35))
+            .setScale(Phaser.Math.FloatBetween(0.7, 1.1));
+    }
+}
+
 function criarTexturaMadeira(scene) {
     const chave = 'fundo_madeira';
     if (scene.textures.exists(chave)) return chave;

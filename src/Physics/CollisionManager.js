@@ -33,20 +33,40 @@ const CollisionManager = {
     },
 
     addBorderColliders(scene, tampinhas, bordas) {
-        scene.physics.add.collider(tampinhas, bordas, (tampinha) => {
+        scene.physics.add.collider(tampinhas, bordas, (tampinha, borda) => {
             if (!tampinha || !tampinha.body) return;
-            const v = Math.hypot(tampinha.body.velocity.x, tampinha.body.velocity.y);
-            // colisões suaves: reduza velocidade; só impactos externos muito fortes causam saída
-            if (v > 260) {
-                // forte — perde menos, pode ser jogada para fora
-                tampinha.body.velocity.x *= 0.78;
-                tampinha.body.velocity.y *= 0.78;
-            } else if (v > 120) {
-                tampinha.body.velocity.x *= 0.6;
-                tampinha.body.velocity.y *= 0.6;
-            } else {
-                tampinha.body.velocity.x *= 0.28;
-                tampinha.body.velocity.y *= 0.28;
+
+            const vx = tampinha.body.velocity.x;
+            const vy = tampinha.body.velocity.y;
+            const speed = Math.hypot(vx, vy);
+            const angle = borda.rotation;
+            const tangent = { x: Math.cos(angle), y: Math.sin(angle) };
+            let normal = { x: -tangent.y, y: tangent.x };
+            const toTampinha = { x: tampinha.x - borda.x, y: tampinha.y - borda.y };
+            const dot = toTampinha.x * normal.x + toTampinha.y * normal.y;
+            if (dot < 0) {
+                normal.x *= -1;
+                normal.y *= -1;
+            }
+
+            const normalSpeed = vx * normal.x + vy * normal.y;
+            const tangentSpeed = vx * tangent.x + vy * tangent.y;
+
+            // resposta mais natural: preserve o componente tangencial e ajuste o normal.
+            const bounceFactor = speed > 240 ? 0.9 : speed > 140 ? 0.64 : 0.25;
+            const newNormalSpeed = -normalSpeed * bounceFactor;
+            const newVx = tangent.x * tangentSpeed + normal.x * newNormalSpeed;
+            const newVy = tangent.y * tangentSpeed + normal.y * newNormalSpeed;
+
+            tampinha.body.setVelocity(newVx, newVy);
+
+            if (speed > 240) {
+                // pancada forte: empurra levemente para fora da pista e mantém energia.
+                tampinha.x += normal.x * 10;
+                tampinha.y += normal.y * 10;
+            } else if (speed > 140) {
+                tampinha.x += normal.x * 6;
+                tampinha.y += normal.y * 6;
             }
         });
     }

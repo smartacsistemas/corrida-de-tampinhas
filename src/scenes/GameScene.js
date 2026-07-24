@@ -34,6 +34,7 @@ class GameScene extends Phaser.Scene {
 
         this.add.tileSprite(0, 0, MUNDO_LARGURA, MUNDO_ALTURA, criarTexturaCimento(this)).setOrigin(0, 0);
         espalharDecoracaoNaPista(this, this.pista);
+        espalharGizApagado(this, this.pista);
         desenharPista(this, this.pista);
         decorarIlhaCentral(this, this.pista);
         desenharZonaAgua(this, this.pista, this.zonaAgua);
